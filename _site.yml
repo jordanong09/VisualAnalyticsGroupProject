@@ -1,0 +1,12 @@
+name: "VisualProject"
+title: "Vast Challenge 2022 (Qn1)"
+description: |
+  Vast Challenge 2022 (Qn1)
+output_dir: "_site"
+navbar:
+  right:
+    - text: "Home"
+      href: index.html
+    - text: "About"
+      href: about.html
+output: distill::distill_article
