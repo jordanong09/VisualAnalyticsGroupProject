@@ -1,7 +1,7 @@
 ---
-title: "Vast Challenge 2022 (Qn1)"
+title: "Visual Analytics Project"
 description: |
-  Welcome to the website. I hope you enjoy it!
+  VAST Challenge 2022
 site: distill::distill_website
 ---
 
@@ -13,3 +13,10 @@ knitr::opts_chunk$set(echo = FALSE)
 
 ```
 
+## [VAST Challenge 2022](https://vast-challenge.github.io/2022/about.html)
+
+The goal of the annual IEEE Visual Analytics Science and Technology (VAST) Challenge is to advance the field of visual analytics through competition. The VAST Challenge is designed to help researchers understand how their software would be used in a variety of analytic tasks and encourage innovation in data transformations and interactive visualizations. VAST Challenge problems provide researchers with realistic tasks and data sets for evaluating their software.
+
+Researchers and software providers often use VAST Challenge data sets as benchmarks to demonstrate and test the capabilities of their systems. The ground truth embedded in the data sets helps researchers evaluate and strengthen the utility of their visual analytic techniques.
+
+VAST Challenges are open to participation by individuals and teams in industry, government, and academia. We encourage your submissions and look forward to seeing your innovative approaches to solving these challenges using visual analytics.

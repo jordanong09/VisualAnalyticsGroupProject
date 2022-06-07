@@ -6,15 +6,37 @@
       "description": "Some additional details about the website",
       "author": [],
       "contents": "\r\n\r\n\r\n\r\n",
-      "last_modified": "2022-05-18T19:06:16+08:00"
+      "last_modified": "2022-05-23T14:16:42+08:00"
     },
     {
       "path": "index.html",
-      "title": "Vast Challenge 2022 (Qn1)",
-      "description": "Welcome to the website. I hope you enjoy it!\n",
+      "title": "Visual Analytics Project",
+      "description": "VAST Challenge 2022\n",
       "author": [],
-      "contents": "\r\n\r\n\r\n\r\n",
-      "last_modified": "2022-05-18T19:07:30+08:00"
+      "contents": "\r\nVAST Challenge\r\n2022\r\nThe goal of the annual IEEE Visual Analytics Science and Technology\r\n(VAST) Challenge is to advance the field of visual analytics through\r\ncompetition. The VAST Challenge is designed to help researchers\r\nunderstand how their software would be used in a variety of analytic\r\ntasks and encourage innovation in data transformations and interactive\r\nvisualizations. VAST Challenge problems provide researchers with\r\nrealistic tasks and data sets for evaluating their software.\r\nResearchers and software providers often use VAST Challenge data sets\r\nas benchmarks to demonstrate and test the capabilities of their systems.\r\nThe ground truth embedded in the data sets helps researchers evaluate\r\nand strengthen the utility of their visual analytic techniques.\r\nVAST Challenges are open to participation by individuals and teams in\r\nindustry, government, and academia. We encourage your submissions and\r\nlook forward to seeing your innovative approaches to solving these\r\nchallenges using visual analytics.\r\n\r\n\r\n\r\n",
+      "last_modified": "2022-06-07T23:00:07+08:00"
+    },
+    {
+      "path": "project_proposal_page.html",
+      "title": "Visual Analytics Project Proposal",
+      "description": "Building visually driven web-enabled Shiny application for democratising data and analytics.\n",
+      "author": [
+        {
+          "name": "Ong Zhi Rong Jordan",
+          "url": "https://isss608-jordan-va.netlify.app/"
+        },
+        {
+          "name": "Joyce Chia",
+          "url": "https://mitb-va-joycetseng.netlify.app/"
+        },
+        {
+          "name": "Kim Bomin",
+          "url": {}
+        }
+      ],
+      "date": "`r Sys.Date()`",
+      "contents": "\r\nBackground\r\nAnticipating rapid growth, the city of Engagement, Ohio USA is doing\r\na participatory urban planning exercise to understand the current state\r\nof the city and identify opportunities for future growth. About 1000\r\nrepresentative residents in this modest-sized city have agreed to\r\nprovide data using the city’s urban planning app, which records the\r\nplaces they visit, their spending, and their purchases, among other\r\nthings. From these volunteers, the city will have data to assist with\r\ntheir major community revitalization efforts, including how to allocate\r\na very large city renewal grant they have recently received.\r\nChallenge Selection\r\nOur group have decided to tackle Challenge 1: Demographics\r\nand Relationships. This challenge involves understanding the\r\ncity’s demographics. Given social networks and other information about\r\nthe city, our team will analyze the available data to prepare a one-page\r\nfact sheet about the city’s demographics, its neighborhoods, and its\r\nbusiness base.\r\nOur team will use visual analytic techniques to address the following\r\nquestions:\r\nAssuming the volunteers are representative of the city’s population,\r\ncharacterize what you can about the demographics of the town.\r\nConsider the social activities in the community. What patterns do\r\nyou see in the social networks in the town?\r\nIdentify the predominant business base of the town, and describe\r\npatterns you observe.\r\nMotivation\r\nThe motivation of our group based on the different question is as\r\nsuch:\r\nOur group will be providing insights on the diversity of the\r\npopulation by the different regions of the city. Residents will have a\r\nbetter understanding on the spread of the population\r\nand provide new residents insights on where is the best\r\nregion based on their needs and status.\r\nFrom the social activities and network, we will be providing\r\ninsights on who are the influential resident on\r\nweekdays (work influence) and weekends (social\r\ninfluence). This will allow them to understand who they can approach if\r\nthey require any assistance based on their needs.\r\nWe will be providing insights on the predominant business base of\r\nthe town based on different time periods. Residents will have a better\r\nunderstanding on what businesses the city is focusing on and possible\r\ntrends on the business revenue.\r\nPossible Obstacle\r\nThere is one obstacle our team might encounter and will share on how\r\nwe intend to overcome the obstacle.\r\nHuge File Size: Due to vast amount of interaction\r\ncollected inside the social network journal, we are unable extract all\r\nthe interaction and analyse it at one go. Our team decided to retrieve\r\nonly the first week of all the months to analyse on the weekday and\r\nweekend interaction to ensure all months are covered for the analyse.\r\nThis will significantly reduce the file size of the data set.\r\nApproach\r\nThese are the approaches by our team to tackle the different\r\nquestions.\r\nQuestion 1 - Demographics\r\nof the Town\r\nTo understand the demographics of the town, our team will first split\r\nthe city into different regions. Our team will then analyse the\r\ndistribution of the following inputs:\r\nBuilding Type: % of Commercial and Residential area in the\r\nRegion\r\nOverall Density: Population Density across the region\r\nDensity by Age Group: Age Group Density across the\r\nregion\r\nIncome Level: Income Level distribution across the\r\nregion\r\nKids: Distribution of resident with/without kids across the\r\nregion\r\nRental Cost: Rental Cost of apartments across the\r\nregion\r\nJoviality: Distribution of Participants based on their\r\njoviality across the region\r\nA total of 3 (2 static and 1 interactive) graphs\r\nwill be plotted. Statistical graph (bottom right) will be plotted to\r\nprovide statistical evidence on the distribution of Participant’s\r\nattribute across the region.\r\nQuestion 1 DraftQuestion 2 - Social\r\nNetwork Patterns\r\nTo understand the social network patterns, our team will identify the\r\ninteraction count based on attributes throughout the year using a\r\nheatmap. Lastly, identifying residents that are influential\r\n(eigenvector), middleman between industries\r\n(betweenness) and information spreader\r\n(closeness).\r\nQuestion 2 DraftSocial Network DraftQuestion 3 - Predominant\r\nBusiness Base\r\nTo understand the predominant business base of the town, we will\r\nfirst find out the amount spend by residents in various\r\npubs/restaurants.\r\nRevenue of restaurants = Visit * Cost of Meal Revenue of Pubs = Total\r\ntime spent in Pub * Hourly cost in Pub\r\nWe will analyse the amount spent in pubs and restaurants across the\r\ndifferent regions, using an interactive tmap to look at the\r\nindividual pubs/restaurants. Lastly, a statistical plot to identify the\r\ndifferent amount spent across the year by the different venue type.\r\nQuestion 3 DraftData Set\r\nTo analyse and plot the required graphs, these are the data set and\r\ntheir description that our team will be exploring:\r\nParticipant.csv: To retrieve all participant’s\r\ninformation\r\nSocialnetwork.csv: To retrieve all interaction of\r\nparticipants\r\nPubs.csv: To retrive pubs information such as\r\nBuildingId and HourlyCost\r\nRestaurants.csv: To retrieve restaurants\r\ninformation such as BuildingId and FoodCost\r\nBuildings.csv: To retrieve the building\r\npolygons\r\nApartments.csv: To retrieve location and rental\r\ncost of Apartments\r\nCheckInJournal.csv: To retrieve the number of\r\ncheck-ins for Pubs, Restaurants and Home\r\nFinancialJournal.csv: To retrieve the wage of\r\nparticipants\r\n\r\n\r\n\r\n",
+      "last_modified": "2022-06-07T22:49:04+08:00"
     }
   ],
   "collections": []
