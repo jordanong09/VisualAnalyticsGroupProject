@@ -1,0 +1,216 @@
+---
+title: "VA project - Point3 Graph"
+author: "Joyce Tseng"
+date: '2022-06-15'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, message = FALSE, warning = FALSE, fig.retina = 3)
+```
+
+
+```{r install package}
+packages <- c('tidyverse', 'ggdist', 'gghalves', 'ggridges', 'patchwork', 
+              'dplyr', 'ggplot2', 'plotly', 'sf', 'tmap')
+for(p in packages){
+  if(!require(p, character.only = T)){
+    install.packages(p)
+  }
+  library(p, character.only = T)
+}
+```
+
+```{r}
+resto <- read_rds('resto.rds')
+resto_month2 <- read_rds('resto_month2.rds')
+pub <- read_rds('pub.rds')
+pub_month2 <- read_rds('pub_month2.rds')
+```
+
+```{r}
+buildings <- read_sf("Buildings.csv", 
+                     options = "GEOM_POSSIBLE_NAMES=location")
+```
+
+```{r}
+Region <- st_read('/Users/joyce/Desktop/SMU_Lecture/ISSS608_Visual Analytics/VAST-Challenge-2022/Datasets/shapefile/buildings.shp') 
+```
+
+```{r eval = FALSE}
+resto_arrange <- resto %>%
+  select(-c(foodCost, weekend_visit, weekday_visit)) %>%
+  rename('Id' = 'restaurantId')
+```
+
+```{r eval = FALSE}
+resto_arrange <- resto_arrange %>%
+  mutate(type = 'restaurant')
+```
+
+```{r eval = FALSE}
+pub_arrange <- pub %>%
+  select(-c(hourlyCost, weekend_time, weekday_time)) %>%
+  rename('Id' = 'pubId')
+```
+
+```{r eval = FALSE}
+pub_arrange <- pub_arrange %>%
+  mutate(type = 'pub')
+```
+
+```{r eval = FALSE}
+total_data <- rbind(resto_arrange, pub_arrange)
+```
+
+```{r eval = FALSE}
+write_rds(total_data, "total_data.rds")
+```
+
+```{r}
+total_data <- read_rds('total_data.rds')
+```
+
+```{r}
+plot_ly(total_data, 
+                  x = ~type, 
+                  y = ~total_earn,
+                  split = ~type,
+                  type = 'violin',
+                  box = list(visible = T),
+                  meanline = list(visible = T)) %>%
+  layout(xaxis = list(title = 'Business Type'),
+         yaxis = list(title = 'Revenue'))
+
+```
+
+```{r}
+plot_ly(total_data, 
+                  x = ~type, 
+                  y = ~weekday_earn,
+                  split = ~type,
+                  type = 'violin',
+                  box = list(visible = T),
+                  meanline = list(visible = T)) %>%
+  layout(xaxis = list(title = 'Business Type'),
+         yaxis = list(title = 'Revenue'))
+
+```
+
+```{r}
+plot_ly(total_data, 
+                  x = ~type, 
+                  y = ~weekend_earn,
+                  split = ~type,
+                  type = 'violin',
+                  box = list(visible = T),
+                  meanline = list(visible = T)) %>%
+  layout(xaxis = list(title = 'Business Type'),
+         yaxis = list(title = 'Revenue'))
+
+```
+
+```{r}
+# Convert foreign object into spatial data
+total_data_sf <- st_as_sf(total_data)
+```
+
+```{r}
+#buildings <- buildings %>%
+  #st_join(Region, join = c(buildingId, bldngId), left = TRUE)
+```
+
+```{r}
+tm_shape(buildings)+
+tm_polygons(col = "grey60",
+           size = 1,
+           border.col = "black",
+           border.lwd = 1) +
+tm_shape(total_data_sf) +
+  tm_symbols(size = 0.5, shape = "type", shapes.labels = c("Restaurant", "Pub"), title.shape = "Venue Type",
+             col = "total_earn", style = "cont", title.col = "Revenue")  +
+  tm_layout(main.title.size = 1, legend.outside.size = 0.2)
+```
+
+```{r}
+tm_shape(buildings)+
+tm_polygons(col = "grey60",
+           size = 1,
+           border.col = "black",
+           border.lwd = 1) +
+tm_shape(total_data_sf) +
+  tm_symbols(size = 0.5, shape = "type", shapes.labels = c("Restaurant", "Pub"), title.shape = "Venue Type",
+             col = "weekday_earn", style = "cont", title.col = "Revenue")  +
+  tm_layout(main.title.size = 1, legend.outside.size = 0.2)
+```
+
+```{r}
+tm_shape(buildings)+
+tm_polygons(col = "grey60",
+           size = 1,
+           border.col = "black",
+           border.lwd = 1) +
+tm_shape(total_data_sf) +
+  tm_symbols(size = 0.5, shape = "type", shapes.labels = c("Restaurant", "Pub"), title.shape = "Venue Type",
+             col = "weekend_earn", style = "cont", title.col = "Revenue")  +
+  tm_layout(main.title.size = 1, legend.outside.size = 0.2)
+```
+
+
+```{r eval = FALSE}
+resto_month_arrange <- resto_month2 %>%
+  select(-c(foodCost, visit))
+```
+
+```{r eval = FALSE}
+resto_month_arrange <- resto_month_arrange %>%
+  mutate(type = 'restaurant')
+```
+
+```{r eval = FALSE}
+pub_month_arrange <- pub_month2 %>%
+  select(-c(hourlyCost, total_time)) 
+```
+
+```{r eval = FALSE}
+pub_month_arrange <- pub_month_arrange %>%
+  mutate(type = 'pub')
+```
+
+```{r eval = FALSE}
+total_month_data <- rbind(resto_month_arrange, pub_month_arrange)
+```
+
+```{r eval = FALSE}
+write_rds(total_month_data, "total_month_data.rds")
+```
+
+```{r}
+total_month_data <- read_rds('total_month_data.rds')
+```
+
+```{r}
+plot_ly(resto_month2, 
+                  x = ~month, 
+                  y = ~earn,
+                  split = ~month,
+                  type = 'violin',
+                  box = list(visible = T),
+                  meanline = list(visible = T)) %>%
+  layout(xaxis = list(title = 'Month'),
+         yaxis = list(title = 'Revenue'))
+
+```
+
+```{r}
+plot_ly(pub_month2, 
+                  x = ~month, 
+                  y = ~earn,
+                  split = ~month,
+                  type = 'violin',
+                  box = list(visible = T),
+                  meanline = list(visible = T)) %>%
+  layout(xaxis = list(title = 'Mpnth'),
+         yaxis = list(title = 'Revenue'))
+
+```
