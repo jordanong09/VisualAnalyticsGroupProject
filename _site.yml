@@ -7,9 +7,4 @@ navbar:
   right:
     - text: "Home"
       href: index.html
-    - text: "About"
-      href: about.html
-  left:
-      - text: "Project Proposal"
-        href: project_proposal_page.html
 output: distill::distill_article
