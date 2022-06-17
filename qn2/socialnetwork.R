@@ -8,9 +8,9 @@ for(p in packages){
   library(p, character.only = T)
 }
 
-finance <- read_csv("rawdata/FinancialJournal.csv")
-Part_nodes <- read_csv("rawdata/Participants.csv")
-Social_edge <- read_csv("rawdata/SocialNetwork.csv")
+finance <- read_csv("qn2/rawdata/FinancialJournal.csv")
+Part_nodes <- read_csv("qn2/rawdata/Participants.csv")
+Social_edge <- read_csv("qn2/rawdata/SocialNetwork.csv")
 
 finance_new <- finance %>% 
   filter (category == "Wage") %>%
@@ -80,12 +80,10 @@ Social_edge_selected_2022 <- Social_edge_selected %>%
 as <- merge(Social_edge_selected_2022,Part_nodes, by = "Participant_ID")
 
 as_1 <- as %>%
-  group_by(Month,Age_Group) %>%
+  group_by(Month,Household_Size) %>%
   summarise(count = n()) %>%
   ungroup
 
 
-ggplot(as_1,aes(Age_Group,Month,fill = count)) +
+ggplot(as_1,aes(Household_Size,Month,fill = count)) +
   geom_tile()
-
-
