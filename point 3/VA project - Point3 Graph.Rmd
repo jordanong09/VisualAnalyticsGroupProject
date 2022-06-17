@@ -34,7 +34,7 @@ buildings <- read_sf("Buildings.csv",
 ```
 
 ```{r}
-Region <- st_read('/Users/joyce/Desktop/SMU_Lecture/ISSS608_Visual Analytics/VAST-Challenge-2022/Datasets/shapefile/buildings.shp') 
+Region <- st_read('buildings.shp') 
 ```
 
 ```{r eval = FALSE}
