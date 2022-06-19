@@ -35,7 +35,6 @@ buildings <- read_sf("data/Buildings.csv",
 apartments <- read_sf("data/Apartments.csv", 
                       options = "GEOM_POSSIBLE_NAMES=location")
 participants <- read_rds("data/hw2_participants.rds")
-check_in <- read_csv("data/CheckinJournal.csv")
 apartments_1 <- readRDS("data/apartments_1.rds")
 buildingsshx<-st_read("data/buildings.shx")
 ```
