@@ -190,10 +190,10 @@ total_month_data <- read_rds('total_month_data.rds')
 ```
 
 ```{r}
-plot_ly(resto_month2, 
-                  x = ~month, 
+plot_ly(total_month_data, 
+                  x = ~time, 
                   y = ~earn,
-                  split = ~month,
+                  split = ~type,
                   type = 'violin',
                   box = list(visible = T),
                   meanline = list(visible = T)) %>%
@@ -204,7 +204,7 @@ plot_ly(resto_month2,
 
 ```{r}
 plot_ly(pub_month2, 
-                  x = ~month, 
+                  x = ~time, 
                   y = ~earn,
                   split = ~month,
                   type = 'violin',
