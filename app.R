@@ -9,9 +9,13 @@ library (sf)
 library (patchwork)
 library (ggstatsplot)
 library (gapminder)
+library (d3treeR)
+library(treemap)
+library(r2d3)
 
 
 interaction <- readRDS("data/participant_interaction.rds")
+interaction_all <- readRDS("data/participant_interaction_all.rds")
 total_data <- read_rds('data/total_data.rds')
 buildings <- read_sf("data/Buildings.csv", 
                      options = "GEOM_POSSIBLE_NAMES=location")
@@ -42,7 +46,7 @@ ui <- fluidPage(
                                 selected = "Household_Size")
                   ),
                   mainPanel(
-                    plotOutput("heatmapPlot")
+                    plotOutput("treemapPlot")
                   )
                 )         
         
@@ -117,16 +121,29 @@ ui <- fluidPage(
 server <- function(input, output, session) {
   
   dataset <- reactive({
-    interaction %>%
-      group_by(Month, .data[[input$Category]])%>%
+    interaction_all %>%
+      group_by(Participant_ID,MonthYear, .data[[input$Category]])%>%
       summarise(InteractionCount = n()) %>%
       ungroup
   })
-
-    output$heatmapPlot <- renderPlot({
-      ggplot(dataset(),aes(x = .data[[input$Category]], y = Month, fill = InteractionCount)) +
-        geom_tile()
+  
+  
+    output$treemapPlot <- renderD3tree3({
+      d3tree3(
+        treemap(dataset(),
+              index = c(input$Category,"Participant_ID"),
+              vSize = "InteractionCount",
+              type = "index",
+              palette = "Set2",
+              align.labels=list(
+                c("center", "center"), 
+                c("right", "bottom")
+              )), 
+        rootname = "Tree Map of Interaction Count by Participant"
+      )
     })
+    
+    
     
     output$plotlyEarnings <- renderPlotly({
       plot_ly(total_data, 

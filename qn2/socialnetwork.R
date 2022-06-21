@@ -1,6 +1,6 @@
 packages = c('igraph', 'tidygraph', 
              'ggraph','lubridate', 'clock',
-             'tidyverse', 'ggmap', 'ggstatsplot', 'ggside', 'ggdist', 'patchwork')
+             'tidyverse', 'ggmap', 'ggstatsplot', 'ggside', 'ggdist', 'patchwork', 'hrbrthemes', 'ggplot2','zoo')
 for(p in packages){
   if(!require(p, character.only = T)){
     install.packages(p)
@@ -71,6 +71,11 @@ Social_edge_selected <- Social_edge %>%
                         abbr = TRUE)) %>%
   mutate (Year = year(timestamp))
 
+Social_edge_all<- Social_edge %>%
+  mutate (MonthYear = as.yearmon(timestamp,"%m/%Y")) %>%
+  rename('Participant_ID' = 'participantIdFrom') %>%
+  select (Participant_ID, MonthYear)
+
 
 Social_edge_selected_2022 <- Social_edge_selected %>%
   filter (Year == 2022) %>%
@@ -79,11 +84,46 @@ Social_edge_selected_2022 <- Social_edge_selected %>%
 
 as <- merge(Social_edge_selected_2022,Part_nodes, by = "Participant_ID")
 
-as_1 <- as %>%
-  group_by(Month,Household_Size) %>%
+as_all <- merge(Social_edge_all,Part_nodes, by = "Participant_ID") 
+
+as_1 <- as_all %>%
+  group_by(MonthYear,Household_Size) %>%
   summarise(count = n()) %>%
   ungroup
 
+saveRDS(as_all,"participant_interaction_all.rds")
 
-ggplot(as_1,aes(Household_Size,Month,fill = count)) +
-  geom_tile()
+
+ggplot(as_1,aes(Household_Size,MonthYear,fill = count)) +
+  geom_tile() + 
+  coord_flip() +
+  scale_fill_distiller(palette = "RdPu") +
+  theme_ipsum()
+
+
+as_2 <- as_all %>%
+  group_by(Participant_ID,MonthYear, Interest_Group)%>%
+  summarise(InteractionCount = n()) %>%
+  ungroup
+
+
+treemapPlot <- d3tree3(
+    treemap(as_2,
+            index = c("Interest_Group","Participant_ID"),
+            vSize = "InteractionCount",
+            type = "value",
+            vColor = "InteractionCount",
+            palette = "Set2",
+            align.labels=list(
+              c("center", "center"), 
+              c("right", "bottom")
+            )), 
+    rootname = "Tree Map of Interaction Count by Participant"
+  )
+
+
+treemapPlot
+
+
+index <- sample(1:nrow(as_2),15,replace = FALSE)
+random <- dput(as_2[index,])
