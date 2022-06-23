@@ -1061,6 +1061,14 @@ h5.subtitle {
   margin-bottom: 15px;
 }
 
+.center {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  width: 50%;
+}
+
+
 /*----------------------
  PRICING
 -----------------------*/

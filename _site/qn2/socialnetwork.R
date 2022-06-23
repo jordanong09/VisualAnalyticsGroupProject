@@ -1,6 +1,6 @@
 packages = c('igraph', 'tidygraph', 
              'ggraph','lubridate', 'clock',
-             'tidyverse', 'ggmap', 'ggstatsplot', 'ggside', 'ggdist', 'patchwork')
+             'tidyverse', 'ggmap', 'ggstatsplot', 'ggside', 'ggdist', 'patchwork', 'hrbrthemes', 'ggplot2','zoo','d3Tree',"d3treeR")
 for(p in packages){
   if(!require(p, character.only = T)){
     install.packages(p)
@@ -8,9 +8,9 @@ for(p in packages){
   library(p, character.only = T)
 }
 
-finance <- read_csv("qn2/rawdata/FinancialJournal.csv")
-Part_nodes <- read_csv("qn2/rawdata/Participants.csv")
-Social_edge <- read_csv("qn2/rawdata/SocialNetwork.csv")
+finance <- read_csv("rawdata/FinancialJournal.csv")
+Part_nodes <- read_csv("rawdata/Participants.csv")
+Social_edge <- read_csv("rawdata/SocialNetwork.csv")
 
 finance_new <- finance %>% 
   filter (category == "Wage") %>%
@@ -72,6 +72,51 @@ Social_edge_selected <- Social_edge %>%
   mutate (Year = year(timestamp))
 
 
+
+work_day <- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
+
+Social_edge_selected_workdays <- Social_edge %>%
+  mutate (Weekday = wday(timestamp,
+                         label = TRUE,
+                         abbr = FALSE)) %>%
+  mutate (month = month(timestamp,
+                        label = FALSE)) %>%
+  mutate (week = lubridate::week(timestamp)) %>%
+  mutate (work_day = case_when(
+    Weekday %in% work_day ~ "Working Days",
+    TRUE ~ "Non-Working Days"
+  )) %>%
+  select (participantIdFrom,participantIdTo,work_day)
+
+
+Social_edge_aggregated <- Social_edge_selected_workdays %>% 
+  group_by(participantIdFrom,participantIdTo,work_day) %>%
+  summarise(Weight = n()) %>%
+  filter (participantIdFrom != participantIdTo) %>%
+  filter (Weight > 1) %>%
+  ungroup
+
+Part_nodes_aggregated <- Part_nodes %>%
+  filter (Participant_ID  %in% c(Social_edge_aggregated$participantIdFrom, Social_edge_aggregated$participantIdTo))
+
+social_graph <- graph_from_data_frame (Social_edge_aggregated,
+                                 vertices = Part_nodes_aggregated) %>%
+  as_tbl_graph()
+
+
+saveRDS(cgraph,"social_graph.rds")
+
+edge_attr(cgraph)
+
+cgraph <- delete_edges(cgraph, which(E(cgraph)$work_day == "Non-Working Days"))
+
+
+Social_edge_all<- Social_edge %>%
+  mutate (MonthYear = as.yearmon(timestamp,"%m/%Y")) %>%
+  rename('Participant_ID' = 'participantIdFrom') %>%
+  select (Participant_ID, MonthYear)
+
+
 Social_edge_selected_2022 <- Social_edge_selected %>%
   filter (Year == 2022) %>%
   rename('Participant_ID' = 'participantIdFrom') %>%
@@ -79,11 +124,39 @@ Social_edge_selected_2022 <- Social_edge_selected %>%
 
 as <- merge(Social_edge_selected_2022,Part_nodes, by = "Participant_ID")
 
-as_1 <- as %>%
-  group_by(Month,Household_Size) %>%
+as_all <- merge(Social_edge_all,Part_nodes, by = "Participant_ID") 
+
+as_1 <- as_all %>%
+  group_by(MonthYear,Household_Size) %>%
   summarise(count = n()) %>%
   ungroup
 
 
-ggplot(as_1,aes(Household_Size,Month,fill = count)) +
-  geom_tile()
+
+as_2 <- as_all %>%
+  group_by(Participant_ID,MonthYear, Interest_Group)%>%
+  summarise(InteractionCount = n()) %>%
+  ungroup
+
+
+treemapPlot <- d3tree3(
+    treemap(as_2,
+            index = c("Interest_Group","Participant_ID"),
+            vSize = "InteractionCount",
+            type = "value",
+            vColor = "InteractionCount",
+            palette = "Set2",
+            )  
+    )
+
+
+treemapPlot
+
+
+index <- sample(1:nrow(Part_nodes_aggregated),100,replace = FALSE)
+random <- dput(Part_nodes_aggregated[index,])
+
+dput(head(cgraph))
+
+df<-c(12,3,4,56,78,18,46,78,100)
+quantile(df,0.9)
