@@ -32,11 +32,10 @@ for (p in packages){
 
 buildings <- read_sf("data/Buildings.csv", 
                      options = "GEOM_POSSIBLE_NAMES=location")
-apartments <- read_sf("data/Apartments.csv", 
-                      options = "GEOM_POSSIBLE_NAMES=location")
 participants <- read_rds("data/hw2_participants.rds")
-apartments_1 <- readRDS("data/apartments_1.rds")
-buildingsshx<-st_read("data/buildings.shx")
+apartments_1 <- readRDS("data/apartments_new.rds")
+
+
 ```
 
 # 1. Building Type 

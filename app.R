@@ -9,11 +9,14 @@ library (sf)
 library (patchwork)
 library (ggstatsplot)
 library (gapminder)
-library (d3treeR)
 library(treemap)
-library(r2d3)
+#renv::install("d3treeR/d3treeR")
+library(d3treeR)
+library (igraph)
+library(hrbrthemes)
 
 
+Participant_Details <- readRDS("data/Participant_Details.rds")
 interaction <- readRDS("data/participant_interaction.rds")
 interaction_all <- readRDS("data/participant_interaction_all.rds")
 total_data <- read_rds('data/total_data.rds')
@@ -21,12 +24,45 @@ buildings <- read_sf("data/Buildings.csv",
                      options = "GEOM_POSSIBLE_NAMES=location")
 resto_month2 <- read_rds('data/resto_month2.rds')
 total_data_sf <- st_as_sf(total_data)
+social_graph <- readRDS("data/social_graph.rds")
+
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
 
     # Application title
     tabsetPanel(
+      
+      tabPanel( "Demographics",
+                
+                plotOutput("barPlot"),
+                
+                hr(),
+                
+                fluidRow(
+                  
+                  column(3, 
+                         h4("User Selection"),
+                         selectInput(inputId = "User_Category",
+                                     label = "Choose a Category Type for Bar Plot",
+                                     choices = c( "Household Size" = "Household_Size",
+                                                  "Have Kids" = "Have_Kids",
+                                                  "Education Level" = "Education_Level",
+                                                  "Interest Group" = "Interest_Group",
+                                                  "Age Group" = "Age_Group",
+                                                  "Income Level" = "Income_Level",
+                                                  "Joviality" = "Joviality_Level"
+                                     ),
+                                     selected = "Household_Size"),
+                         br(),
+                         
+                         uiOutput("filter1")
+                         
+                  ),
+                  
+                ),
+                
+      ),
       
       tabPanel( "Social Interaction",
                 # Sidebar with a slider input for number of bins 
@@ -43,10 +79,31 @@ ui <- fluidPage(
                                              "Interest Group" = "Interest_Group",
                                              "Age Group" = "Age_Group"
                                 ),
-                                selected = "Household_Size")
+                                selected = "Household_Size"),
+                    
+                    selectInput(inputId = "workday",
+                                label = "Choose a Workday Type",
+                                choices = c( "Working Days",
+                                             "Non-Working Days"
+                                ),
+                                selected = "Working Days"),
+                    
+                    
+                    selectInput(inputId = "Network",
+                                label = "Choose a Network Centrality Measure",
+                                choices = c( "Degree Centrality" = "degree",
+                                             "Eigenvector Centrality" = "eig",
+                                             "Hub centrality" = "hubs",
+                                             "Authority centrality" = "authorities",
+                                             "Closeness centrality" = "closeness"
+                                ),
+                                selected = "degree")
+                    
+                    
                   ),
                   mainPanel(
-                    plotOutput("treemapPlot")
+                    d3treeOutput("treemapPlot"),
+                    plotOutput ("socialPlot")
                   )
                 )         
         
@@ -124,24 +181,71 @@ server <- function(input, output, session) {
     interaction_all %>%
       group_by(Participant_ID,MonthYear, .data[[input$Category]])%>%
       summarise(InteractionCount = n()) %>%
+      filter(InteractionCount > 1) %>%
       ungroup
   })
   
+  vards1 <- reactive ({
+    switch(input$User_Category,
+           "Household_Size" = unique(Participant_Details$Household_Size),
+           "Have_Kids"= unique(Participant_Details$Have_Kids) ,
+           "Education_Level" = unique(Participant_Details$Education_Level),
+           "Interest_Group" = unique(Participant_Details$Interest_Group),
+           "Age_Group" = unique(Participant_Details$Age_Group),
+           "Income_Level" = unique(Participant_Details$Income_Level),
+           "Joviality_Level" = unique(Participant_Details$Joviality_Level))
+    
+  })
   
+  output$filter1 <- renderUI({
+    radioButtons("fil1","", choices=vards1())
+  })
+  
+  #
+  # social_data <- reactive ({
+  #   social_graph %>%
+  #     delete_edges(social_graph, which(E(social_graph)$work_day == input$workday)) %>%
+  #   V(social_graph)$degree <- degree(social_graph)                
+  #   V(social_graph)$eig <- evcent(social_graph)$vector              
+  #   V(social_graph)$hubs <- hub.score(social_graph)$vector           
+  #   V(social_graph)$authorities <- authority.score(social_graph)$vector 
+  #   V(social_graph)$closeness <- closeness(social_graph)                
+  #   V(social_graph)$betweenness <- betweenness(social_graph)
+  #   V(social_graph)$color <- ifelse (V(social_graph)$.data[[input$Network]] > quantile(V(social_graph)$.data[[input$Network]],0.9), "darkgoldenrod3", "azure3")
+  #   V(social_graph)$size <- ifelse (V(social_graph)$.data[[input$Network]] > quantile(V(social_graph)$.data[[input$Network]],0.9), 2, 0.05)
+  #   V(social_graph)$label <- ifelse (V(social_graph)$.data[[input$Network]] > quantile(V(social_graph)$.data[[input$Network]],0.9),V(social_graph)$name,NA)
+  # })
+  # 
+  #   output$socialPlot <- plot.igraph(social_data(),layout=layout.mds, edge.arrow.size=0.1,edge.arrow.mode = "-", vertex.label.cex = 0.65, vertex.label.font = 2)
     output$treemapPlot <- renderD3tree3({
       d3tree3(
-        treemap(dataset(),
+      treemap(dataset(),
               index = c(input$Category,"Participant_ID"),
               vSize = "InteractionCount",
               type = "index",
-              palette = "Set2",
-              align.labels=list(
-                c("center", "center"), 
-                c("right", "bottom")
-              )), 
-        rootname = "Tree Map of Interaction Count by Participant"
-      )
+              palette="Set2",
+              title="Interaction Count of Participant",
+              title.legend = "Interaction Count"
+              ), 
+      rootname = "Tree Map of Interaction Count by Participant"
+    )
+  })
+    
+    output$barPlot <- renderPlot({
+      ggplot(Participant_Details,
+             aes(fill = factor(.data[[input$User_Category]]), x = Region)) + 
+        geom_bar(position = "dodge") + 
+        scale_fill_viridis(discrete = T, option = "E") +
+        facet_wrap(~.data[[input$User_Category]]) +
+        labs(y= 'No. of\nResidents', x= 'Region',
+             title = "Distribution of Residents' Across Regions") +
+        theme(axis.title.y= element_text(angle=0), axis.ticks.x= element_blank(),
+              panel.background= element_blank(), axis.line= element_line(color= 'grey'), legend.position="none") 
+        
     })
+    
+    
+    #output of inputs for UI
     
     
     

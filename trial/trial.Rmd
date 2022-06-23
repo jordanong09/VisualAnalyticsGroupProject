@@ -1,0 +1,101 @@
+---
+title: "trial"
+author: "Ong Zhi Rong Jordan"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+packages = c('sf', 'tmap', 'tidyverse', 
+             'lubridate', 'clock', 
+             'sftime', 'rmarkdown', "binr","ggplot2","ggpubr")
+for (p in packages){
+  if(!require(p, character.only = T)){
+    install.packages(p)
+  }
+  library(p,character.only = T)
+}
+
+```
+
+``` {r}
+
+Region <- st_read('data/buildings.shp')
+buildings <- read_sf("data/Buildings.csv", 
+                     options = "GEOM_POSSIBLE_NAMES=location")
+participants <- read_rds("data/hw2_participants.rds")
+apartments_1 <- readRDS("data/apartments_new.rds")
+
+```
+
+``` {r}
+
+participants_1 <- participants %>%
+  select (participantId, Apartmentvisits)
+
+Region_1 <- Region %>%
+  select (units, region,-geometry)
+
+```
+
+``` {r}
+
+a <- st_set_geometry(Region_1,NULL)
+
+apartment_long <- a %>% tidyr::separate_rows(units, convert = TRUE)
+participants_full <- participants_1 %>% left_join(apartment_long, by = c("Apartmentvisits" = "units"))
+
+```
+
+``` {r}
+
+participants_full <- participants_full %>%
+  rename('Participant_ID' = 'participantId')
+
+Part_nodes <- Part_nodes %>%
+  left_join(participants_full, by = "Participant_ID")
+```
+
+``` {r}
+high_income <- quantile(Part_nodes$Income,0.8, na.rm = TRUE)
+low_income <- quantile(Part_nodes$Income,0.2, na.rm = TRUE)
+
+high_joy <- quantile(Part_nodes$Joviality,0.8, na.rm = TRUE)
+low_joy <- quantile(Part_nodes$Joviality,0.2, na.rm = TRUE)
+
+Part_nodes_full <- Part_nodes %>%
+  mutate (
+    Income_Level = case_when(
+      Income >= high_income ~ "High_Income_Earner",
+      Income <= low_income ~ "Low_Income_Earner",
+      is.na(Income) ~ "NA",
+      TRUE ~ "Medium_Income_Earner"
+    )
+  ) %>%
+  mutate (
+    Joviality_Level = case_when(
+      Joviality >= high_joy ~ "Happy_Participant",
+      Joviality <= low_joy ~ "Dull_Participant",
+      TRUE ~ "Average_Participant"
+    )
+  ) %>%
+  rename("Region" = "region") %>%
+  select(-Joviality,-Income,-Apartmentvisits,-Expenses)
+
+```
+
+```{r}
+saveRDS(Part_nodes_full, "Participant_Details.rds")
+
+```
+
+
+``` {r}
+
+
+
+```
