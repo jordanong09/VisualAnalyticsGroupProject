@@ -8,9 +8,9 @@ for(p in packages){
   library(p, character.only = T)
 }
 
-finance <- read_csv("rawdata/FinancialJournal.csv")
-Part_nodes <- read_csv("rawdata/Participants.csv")
-Social_edge <- read_csv("rawdata/SocialNetwork.csv")
+finance <- read_csv("qn2/rawdata/FinancialJournal.csv")
+Part_nodes <- read_csv("qn2/rawdata/Participants.csv")
+Social_edge <- read_csv("qn2/rawdata/SocialNetwork.csv")
 
 finance_new <- finance %>% 
   filter (category == "Wage") %>%
@@ -75,6 +75,7 @@ Social_edge_selected <- Social_edge %>%
 
 work_day <- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
 
+
 Social_edge_selected_workdays <- Social_edge %>%
   mutate (Weekday = wday(timestamp,
                          label = TRUE,
@@ -82,29 +83,81 @@ Social_edge_selected_workdays <- Social_edge %>%
   mutate (month = month(timestamp,
                         label = FALSE)) %>%
   mutate (week = lubridate::week(timestamp)) %>%
-  mutate (work_day = case_when(
-    Weekday %in% work_day ~ "Working Days",
-    TRUE ~ "Non-Working Days"
+  mutate (Year = year(timestamp)) %>%
+  filter (Year == 2022 | month == 1 | month == 2) %>%
+  mutate (day = day(timestamp)) %>%
+  mutate (weeknum = case_when(
+    day <= 7 ~ 1,
+    day <= 14 ~ 2,
+    day <= 21 ~ 3,
+    day <= 31 ~ 4
   )) %>%
-  select (participantIdFrom,participantIdTo,work_day)
+  select(participantIdFrom,month,workday)
+
+social_edge_plot <- Social_edge_selected_workdays %>%
+  group_by (month) %>%
+  summarise(Weight = n())
+  
 
 
 Social_edge_aggregated <- Social_edge_selected_workdays %>% 
-  group_by(participantIdFrom,participantIdTo,work_day) %>%
+  group_by(participantIdFrom,participantIdTo,workday) %>%
   summarise(Weight = n()) %>%
   filter (participantIdFrom != participantIdTo) %>%
   filter (Weight > 1) %>%
   ungroup
 
-Part_nodes_aggregated <- Part_nodes %>%
-  filter (Participant_ID  %in% c(Social_edge_aggregated$participantIdFrom, Social_edge_aggregated$participantIdTo))
+Part_nodes_aggregated_workingday <- Participant_Details %>%
+  filter (Participant_ID  %in% c(Social_edge_aggregated_workingday$participantIdFrom, Social_edge_aggregated_workingday$participantIdTo))
 
-social_graph <- graph_from_data_frame (Social_edge_aggregated,
-                                 vertices = Part_nodes_aggregated) %>%
+Part_nodes_aggregated_non_workingday <- Participant_Details %>%
+  filter (Participant_ID  %in% c(Social_edge_aggregated_non_workingday$participantIdFrom, Social_edge_aggregated_non_workingday$participantIdTo))
+
+
+Social_edge_aggregated_workingday <- Social_edge_aggregated %>%
+  filter(workday == "Working Day")
+
+
+Social_edge_aggregated_non_workingday <- Social_edge_aggregated %>%
+  filter(workday == "Non-Working Day")
+
+
+social_graph_workingday <- graph_from_data_frame (Social_edge_aggregated_workingday,
+                                 vertices = Part_nodes_aggregated_workingday) %>%
+  as_tbl_graph()
+
+social_graph_non_workingday <- graph_from_data_frame (Social_edge_aggregated_non_workingday,
+                                                  vertices = Part_nodes_aggregated_non_workingday) %>%
   as_tbl_graph()
 
 
-saveRDS(cgraph,"social_graph.rds")
+V(social_graph_workingday)$degree <- degree(social_graph_workingday)
+V(social_graph_workingday)$eig <- evcent(social_graph_workingday)$vector
+V(social_graph_workingday)$hubs <- hub.score(social_graph_workingday)$vector
+V(social_graph_workingday)$authorities <- authority.score(social_graph_workingday)$vector
+V(social_graph_workingday)$closeness <- closeness(social_graph_workingday)
+V(social_graph_workingday)$betweenness <- betweenness(social_graph_workingday)
+
+V(social_graph_non_workingday)$degree <- degree(social_graph_non_workingday)
+V(social_graph_non_workingday)$eig <- evcent(social_graph_non_workingday)$vector
+V(social_graph_non_workingday)$hubs <- hub.score(social_graph_non_workingday)$vector
+V(social_graph_non_workingday)$authorities <- authority.score(social_graph_non_workingday)$vector
+V(social_graph_non_workingday)$closeness <- closeness(social_graph_non_workingday)
+V(social_graph_non_workingday)$betweenness <- betweenness(social_graph_non_workingday)
+
+
+high_level <- quantile (V(social_graph_workingday)$eig,0.9)
+
+V(social_graph_workingday)$color <- ifelse (V(social_graph_workingday)$eig > high_level, "darkgoldenrod3", "azure3")
+V(social_graph_workingday)$size <- ifelse (V(social_graph_workingday)$eig > high_level, 2, 0.05)
+V(social_graph_workingday)$label <- ifelse (V(social_graph_workingday)$eig > high_level,V(social_graph_workingday)$name,NA)
+
+
+plot(social_graph_workingday,layout=layout.mds, edge.arrow.size=0.1,edge.arrow.mode = "-", vertex.label.cex = 0.65, vertex.label.font = 1)
+
+saveRDS(Part_nodes_aggregated_non_workingday,"SUREWORK.rds")
+saveRDS(social_graph_workingday,"social_graph_workingday.rds")
+plot.i
 
 edge_attr(cgraph)
 

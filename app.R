@@ -24,7 +24,10 @@ buildings <- read_sf("data/Buildings.csv",
                      options = "GEOM_POSSIBLE_NAMES=location")
 resto_month2 <- read_rds('data/resto_month2.rds')
 total_data_sf <- st_as_sf(total_data)
-social_graph <- readRDS("data/social_graph.rds")
+social_graph_workingday <- readRDS("data/social_graph_workingday.rds")
+social_graph_non_workingday <- readRDS("data/social_graph_non_working.rds")
+total_month_data <- read_rds('data/total_month_data_new.rds')
+
 
 
 # Define UI for application that draws a histogram
@@ -112,6 +115,13 @@ ui <- fluidPage(
       
       tabPanel( "Business",
                 
+                selectInput(inputId = "ggstatfilter",
+                            label = "Choose Venue Type for Statistical Plot",
+                            choices = c( "Restaurant",
+                                         "Pub"
+                            ),
+                            selected = "Restaurant"),
+                
                 plotOutput("statsPlot"),
                 
                 hr(),
@@ -185,6 +195,13 @@ server <- function(input, output, session) {
       ungroup
   })
   
+  ggstatsplot <- reactive({
+    total_month_data %>%
+      filter(type == input$ggstatfilter)
+  })
+  
+  
+  
   vards1 <- reactive ({
     switch(input$User_Category,
            "Household_Size" = unique(Participant_Details$Household_Size),
@@ -201,35 +218,33 @@ server <- function(input, output, session) {
     radioButtons("fil1","", choices=vards1())
   })
   
-  #
-  # social_data <- reactive ({
-  #   social_graph %>%
-  #     delete_edges(social_graph, which(E(social_graph)$work_day == input$workday)) %>%
-  #   V(social_graph)$degree <- degree(social_graph)                
-  #   V(social_graph)$eig <- evcent(social_graph)$vector              
-  #   V(social_graph)$hubs <- hub.score(social_graph)$vector           
-  #   V(social_graph)$authorities <- authority.score(social_graph)$vector 
-  #   V(social_graph)$closeness <- closeness(social_graph)                
-  #   V(social_graph)$betweenness <- betweenness(social_graph)
-  #   V(social_graph)$color <- ifelse (V(social_graph)$.data[[input$Network]] > quantile(V(social_graph)$.data[[input$Network]],0.9), "darkgoldenrod3", "azure3")
-  #   V(social_graph)$size <- ifelse (V(social_graph)$.data[[input$Network]] > quantile(V(social_graph)$.data[[input$Network]],0.9), 2, 0.05)
-  #   V(social_graph)$label <- ifelse (V(social_graph)$.data[[input$Network]] > quantile(V(social_graph)$.data[[input$Network]],0.9),V(social_graph)$name,NA)
-  # })
-  # 
-  #   output$socialPlot <- plot.igraph(social_data(),layout=layout.mds, edge.arrow.size=0.1,edge.arrow.mode = "-", vertex.label.cex = 0.65, vertex.label.font = 2)
-    output$treemapPlot <- renderD3tree3({
-      d3tree3(
-      treemap(dataset(),
-              index = c(input$Category,"Participant_ID"),
-              vSize = "InteractionCount",
-              type = "index",
-              palette="Set2",
-              title="Interaction Count of Participant",
-              title.legend = "Interaction Count"
-              ), 
-      rootname = "Tree Map of Interaction Count by Participant"
-    )
-  })
+
+   social_data <- reactive ({
+      
+     V(social_graph_workingday)$color <- ifelse (V(social_graph_workingday)$.data[[input$Network]] > quantile(V(social_graph_workingday)$.data[[input$Network]],0.9), "darkgoldenrod3", "azure3")
+     V(social_graph_workingday)$size <- ifelse (V(social_graph_workingday)$.data[[input$Network]] > quantile(V(social_graph_workingday)$.data[[input$Network]],0.9), 2, 0.05)
+     V(social_graph_workingday)$label <- ifelse (V(social_graph_workingday)$.data[[input$Network]] > quantile(V(social_graph_workingday)$.data[[input$Network]],0.9),V(social_graph_workingday)$name,NA)
+   })
+   
+   output$treemapPlot <- renderD3tree3({
+     d3tree3(
+       treemap(dataset(),
+               index = c(input$Category,"Participant_ID"),
+               vSize = "InteractionCount",
+               type = "index",
+               palette="Set2",
+               title="Interaction Count of Participant",
+               title.legend = "Interaction Count"
+       ), 
+       rootname = "Tree Map of Interaction Count by Participant"
+     )
+   })
+
+    output$socialPlot <- renderPlot({
+      plot.igraph(social_data(),layout=layout.mds, edge.arrow.size=0.1,edge.arrow.mode = "-", vertex.label.cex = 0.65, vertex.label.font = 2)
+    })
+
+
     
     output$barPlot <- renderPlot({
       ggplot(Participant_Details,
@@ -276,13 +291,14 @@ server <- function(input, output, session) {
     output$statsPlot <- renderPlot({
       
       ggbetweenstats(
-        data = resto_month2,
-        x = month,
+        data = ggstatsplot(),
+        x = time,
         y = earn,
         type = input$testType,
-        xlab = "Month",
+        xlab = "Mon/Year",
         ylab = "Revenue",
         p.adjust.method = input$pvalueType,
+        palette = "Set3",
         plot.type = input$plotType,
         ggtheme = ggplot2::theme_gray(),
         title = "Revenue of Restaurant for different Months"

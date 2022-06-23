@@ -29,8 +29,52 @@ buildings <- read_sf("data/Buildings.csv",
                      options = "GEOM_POSSIBLE_NAMES=location")
 participants <- read_rds("data/hw2_participants.rds")
 apartments_1 <- readRDS("data/apartments_new.rds")
+participants_details <- readRDS("Participant_Details.rds")
 
 ```
+
+
+``` {r}
+apartments_1 <- apartments_1 %>%
+  select (participantId, buildingId) %>%
+  rename('Participant_ID' = 'participantId')
+
+participants_details <- participants_details %>%
+  left_join(apartments_1, by = "Participant_ID")
+
+```
+
+``` {r}
+
+building_plot <- participants_details %>%
+  group_by(buildingId,Region,Joviality_Level) %>%
+  summarise(StayCount = n()) %>%
+  filter (Joviality_Level == "Happy_Participant")
+
+building_plot$buildingId <- as.character(building_plot$buildingId)
+
+
+```
+
+``` {r}
+
+building_new <- buildings %>%
+  left_join(building_plot, by= 'buildingId')
+
+st_as_sf(building_new)
+
+tmap_mode("view")
+tm_shape(building_new)+
+  tm_polygons(col = "StayCount",
+              size = 1,
+              title = "Building Type",
+              border.col = "black",
+              border.lwd = 1) +
+  tm_layout(main.title= 'Building Type in Engagement, Ohio', 
+            main.title.position = c('left'),
+            main.title.size = 1.3, legend.outside = TRUE,)
+```
+
 
 ``` {r}
 
@@ -95,7 +139,9 @@ saveRDS(Part_nodes_full, "Participant_Details.rds")
 
 
 ``` {r}
+total_month_data$time <- factor(total_month_data$time,levels = c("Mar 22", "Apr 22", "May 22", "Jun 22", "Jul 22", "Aug 22", "Sep 22", "Oct 22", "Nov 22", "Dec 22", "Jan 23", "Feb 23", "Mar 23", "Apr 23", "May 23"))
 
-
-
+saveRDS(total_month_data,"total_month_data_new.rds")
 ```
+
+
