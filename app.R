@@ -13,7 +13,7 @@ library(treemap)
 #renv::install("d3treeR/d3treeR")
 library(d3treeR)
 library (igraph)
-library(hrbrthemes)
+library(ggsci)
 
 
 Participant_Details <- readRDS("data/Participant_Details.rds")
@@ -27,7 +27,10 @@ total_data_sf <- st_as_sf(total_data)
 social_graph_workingday <- readRDS("data/social_graph_workingday.rds")
 social_graph_non_workingday <- readRDS("data/social_graph_non_working.rds")
 total_month_data <- read_rds('data/total_month_data_new.rds')
-
+grid_data <- readRDS('data/grid_data.rds')
+base_data <- readRDS('data/base_data.rds')
+label_data <- readRDS('data/label_data.rds')
+social_circular_barplot <- readRDS('data/social_circular_barplot.rds')
 
 
 # Define UI for application that draws a histogram
@@ -106,7 +109,8 @@ ui <- fluidPage(
                   ),
                   mainPanel(
                     d3treeOutput("treemapPlot"),
-                    plotOutput ("socialPlot")
+                    #plotOutput ("socialPlot"),
+                    plotOutput ("circularPlot")
                   )
                 )         
         
@@ -130,6 +134,7 @@ ui <- fluidPage(
                   
                   column(3, 
                          h4("User Selection"),
+                         
                          selectInput(inputId = "Weekday",
                                      label = "Choose a Weekday Type",
                                      choices = c( "Weekday Earnings" = "weekday_earn",
@@ -172,7 +177,7 @@ ui <- fluidPage(
                   ),
                   
                   column(4,offset = 1,
-                         plotlyOutput("plotlyEarnings")
+                         plotOutput("typePlot")
                          ),
                   column(4, 
                          plotOutput("tMapEarnings"))       
@@ -198,6 +203,13 @@ server <- function(input, output, session) {
   ggstatsplot <- reactive({
     total_month_data %>%
       filter(type == input$ggstatfilter)
+  })
+  
+  ggstatsplot2 <- reactive({
+    switch(input$Weekday,
+           "total_earn" = total_earn,
+           "weekday_earn"= weekday_earn,
+           "weekend_earn" = weekday_earn)
   })
   
   
@@ -240,9 +252,40 @@ server <- function(input, output, session) {
      )
    })
 
-    output$socialPlot <- renderPlot({
-      plot.igraph(social_data(),layout=layout.mds, edge.arrow.size=0.1,edge.arrow.mode = "-", vertex.label.cex = 0.65, vertex.label.font = 2)
-    })
+   output$circularPlot <- renderPlot ({
+     ggplot(social_circular_barplot) +      
+       
+       # Add the stacked bar
+       geom_bar(aes(x=as.factor(id), y=value, fill=workday), stat="identity", alpha=0.5) +
+       scale_fill_tron()+
+       
+       # Add a val=100/75/50/25 lines. I do it at the beginning to make sur barplots are OVER it.
+       geom_segment(data=grid_data, aes(x = end, y = 0, xend = start, yend = 0), colour = "grey", alpha=1, size=0.3 , inherit.aes = FALSE ) +
+       geom_segment(data=grid_data, aes(x = end, y = 50000, xend = start, yend = 50000), colour = "grey", alpha=1, size=0.3 , inherit.aes = FALSE ) +
+       geom_segment(data=grid_data, aes(x = end, y = 100000, xend = start, yend = 100000), colour = "grey", alpha=1, size=0.3 , inherit.aes = FALSE ) +
+       geom_segment(data=grid_data, aes(x = end, y = 150000, xend = start, yend = 150000), colour = "grey", alpha=1, size=0.3 , inherit.aes = FALSE ) +
+       geom_segment(data=grid_data, aes(x = end, y = 200000, xend = start, yend = 200000), colour = "grey", alpha=1, size=0.3 , inherit.aes = FALSE ) +
+       
+       # Add text showing the value of each 100/75/50/25 lines
+       annotate("text", x = rep(max(social_circular_barplot$id),5), y = c(0, 50000, 100000, 150000, 200000), label = c("0", "50000", "100000", "150000", "200000") , color="grey", size=2 , angle=0, fontface="bold", hjust=0.8) +
+       
+       ylim(-200000,max(label_data$tot + 1000, na.rm=T)) +
+       labs(title = "Social Interaction of Participants by Month and Week", caption = "From Mar 22 - Feb 23", fill = "Workday Type") +
+       theme_minimal() +
+       theme(
+         legend.position="right",
+         axis.text = element_blank(),
+         axis.title.x = element_blank(),
+         axis.title.y = element_blank(),
+         panel.grid = element_blank()
+       ) +
+       coord_polar(start = 0) +
+       # Add labels on top of each bar
+       geom_text(data=label_data, aes(x=id, y=tot+1000, label=weeknum, hjust=hjust), color="black", fontface="bold",alpha=0.6, size=3, angle= label_data$angle, inherit.aes = FALSE ) +
+       # Add base line information
+       geom_segment(data=base_data, aes(x = start, y = -5, xend = end, yend = -5), colour = "black", alpha=0.8, size= 0.4 , inherit.aes = FALSE ) +
+       geom_text(data=base_data, aes(x = title, y = -25000, label=as.factor(month)), hjust=c(1,1,1,1,1,1,0,0,0,0,0,0), colour = "black", alpha=0.7, size=3, fontface="bold", inherit.aes = FALSE)
+   })
 
 
     
@@ -264,16 +307,21 @@ server <- function(input, output, session) {
     
     
     
-    output$plotlyEarnings <- renderPlotly({
-      plot_ly(total_data, 
-              x = ~type, 
-              y = ~.data[[input$Weekday]],
-              split = ~type,
-              type = 'violin',
-              box = list(visible = T),
-              meanline = list(visible = T)) %>%
-        layout(xaxis = list(title = 'Business Type'),
-               yaxis = list(title = 'Revenue'))
+    output$typePlot <- renderPlot({
+
+      ggbetweenstats(
+        data = total_data,
+        x = type,
+        y = input$Weekday,
+        type = input$testType,
+        xlab = "Business Type",
+        ylab = "Revenue",
+        p.adjust.method = input$pvalueType,
+        palette = "Set3",
+        plot.type = input$plotType,
+        ggtheme = ggplot2::theme_gray()
+      )
+      
     })
     
     output$tMapEarnings <- renderPlot({
@@ -300,7 +348,7 @@ server <- function(input, output, session) {
         p.adjust.method = input$pvalueType,
         palette = "Set3",
         plot.type = input$plotType,
-        ggtheme = ggplot2::theme_gray(),
+        ggtheme = ggplot2::theme_gray() + theme(axis.title.y= element_text(angle=0)),
         title = "Revenue of Restaurant for different Months"
       )
       

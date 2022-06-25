@@ -1,6 +1,6 @@
 packages = c('igraph', 'tidygraph', 
              'ggraph','lubridate', 'clock',
-             'tidyverse', 'ggmap', 'ggstatsplot', 'ggside', 'ggdist', 'patchwork', 'hrbrthemes', 'ggplot2','zoo','d3Tree',"d3treeR")
+             'tidyverse', 'ggmap', 'ggstatsplot', 'ggside', 'ggdist', 'patchwork', 'hrbrthemes', 'ggplot2','zoo','d3Tree',"d3treeR","graphlayouts","RColorBrewer","ggsci")
 for(p in packages){
   if(!require(p, character.only = T)){
     install.packages(p)
@@ -10,7 +10,7 @@ for(p in packages){
 
 finance <- read_csv("qn2/rawdata/FinancialJournal.csv")
 Part_nodes <- read_csv("qn2/rawdata/Participants.csv")
-Social_edge <- read_csv("qn2/rawdata/SocialNetwork.csv")
+Social_edge <- read_csv("rawdata/SocialNetwork.csv")
 
 finance_new <- finance %>% 
   filter (category == "Wage") %>%
@@ -81,10 +81,10 @@ Social_edge_selected_workdays <- Social_edge %>%
                          label = TRUE,
                          abbr = FALSE)) %>%
   mutate (month = month(timestamp,
-                        label = FALSE)) %>%
+                        label = TRUE)) %>%
   mutate (week = lubridate::week(timestamp)) %>%
   mutate (Year = year(timestamp)) %>%
-  filter (Year == 2022 | month == 1 | month == 2) %>%
+  filter (Year == 2022 | month == "Jan" | month == "Feb") %>%
   mutate (day = day(timestamp)) %>%
   mutate (weeknum = case_when(
     day <= 7 ~ 1,
@@ -92,7 +92,11 @@ Social_edge_selected_workdays <- Social_edge %>%
     day <= 21 ~ 3,
     day <= 31 ~ 4
   )) %>%
-  select(participantIdFrom,month,workday)
+  mutate (workday = case_when(
+    Weekday %in% work_day ~ "Working Day",
+    TRUE ~ "Non-Working Day"
+  )) %>%
+  select(participantIdFrom,month,workday,weeknum)
 
 social_edge_plot <- Social_edge_selected_workdays %>%
   group_by (month) %>%
@@ -146,12 +150,26 @@ V(social_graph_non_workingday)$closeness <- closeness(social_graph_non_workingda
 V(social_graph_non_workingday)$betweenness <- betweenness(social_graph_non_workingday)
 
 
+V(social_graph_workingday)$pagerank <- page_rank(social_graph_workingday)
+
+
+
 high_level <- quantile (V(social_graph_workingday)$eig,0.9)
 
 V(social_graph_workingday)$color <- ifelse (V(social_graph_workingday)$eig > high_level, "darkgoldenrod3", "azure3")
 V(social_graph_workingday)$size <- ifelse (V(social_graph_workingday)$eig > high_level, 2, 0.05)
 V(social_graph_workingday)$label <- ifelse (V(social_graph_workingday)$eig > high_level,V(social_graph_workingday)$name,NA)
 
+V(social_graph_workingday)$clu <- as.character(membership(cluster_edge_betweenness(social_graph_workingday)))
+
+
+k1 <- cluster_walktrap(social_graph_workingday)
+k2 <- cluster_infomap(social_graph_workingday)
+k4 <-  biconnected.components(social_graph_workingday)
+
+V(social_graph_workingday)$infomap <- k2$membership
+
+sort(unique(V(social_graph_workingday)$infomap))
 
 plot(social_graph_workingday,layout=layout.mds, edge.arrow.size=0.1,edge.arrow.mode = "-", vertex.label.cex = 0.65, vertex.label.font = 1)
 
@@ -213,3 +231,11 @@ dput(head(cgraph))
 
 df<-c(12,3,4,56,78,18,46,78,100)
 quantile(df,0.9)
+
+
+
+
+total_data$type <- sub("pub","Pub",total_data$type)
+
+
+saveRDS(total_data,"total_data.rds")
