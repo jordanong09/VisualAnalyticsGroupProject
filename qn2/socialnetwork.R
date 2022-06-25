@@ -9,8 +9,8 @@ for(p in packages){
 }
 
 finance <- read_csv("qn2/rawdata/FinancialJournal.csv")
-Part_nodes <- read_csv("qn2/rawdata/Participants.csv")
-Social_edge <- read_csv("rawdata/SocialNetwork.csv")
+Part_nodes <- readRDS("data/Participant_Details.rds")
+Social_edge <- read_csv("qn2/rawdata/SocialNetwork.csv")
 
 finance_new <- finance %>% 
   filter (category == "Wage") %>%
@@ -195,7 +195,17 @@ Social_edge_selected_2022 <- Social_edge_selected %>%
 
 as <- merge(Social_edge_selected_2022,Part_nodes, by = "Participant_ID")
 
-as_all <- merge(Social_edge_all,Part_nodes, by = "Participant_ID") 
+interaction_all <- merge(Social_edge_all,Part_nodes, by = "Participant_ID")
+
+trial <- interaction_all %>%
+  group_by(Participant_ID) %>%
+  mutate (InteractionCount = n()) %>%
+  distinct(Participant_ID, .keep_all = TRUE) %>%
+  select(-MonthYear)
+
+trial$Age_Group <- as.character(trial$Age_Group)
+
+saveRDS(trial, "interaction_all.rds")
 
 as_1 <- as_all %>%
   group_by(MonthYear,Household_Size) %>%

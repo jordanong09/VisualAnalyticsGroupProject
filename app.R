@@ -18,7 +18,7 @@ library(ggsci)
 
 Participant_Details <- readRDS("data/Participant_Details.rds")
 interaction <- readRDS("data/participant_interaction.rds")
-interaction_all <- readRDS("data/participant_interaction_all.rds")
+interaction_all <- readRDS("data/interaction_all.rds")
 total_data <- read_rds('data/total_data.rds')
 buildings <- read_sf("data/Buildings.csv", 
                      options = "GEOM_POSSIBLE_NAMES=location")
@@ -41,9 +41,6 @@ ui <- fluidPage(
       
       tabPanel( "Demographics",
                 
-                plotOutput("barPlot"),
-                
-                hr(),
                 
                 fluidRow(
                   
@@ -65,8 +62,34 @@ ui <- fluidPage(
                          uiOutput("filter1")
                          
                   ),
+                  column (6,
+                          plotOutput("barPlot")),
                   
                 ),
+                
+                fluidRow(
+                  
+                  column(3, 
+                         h4("User Selection"),
+                         selectInput(inputId = "User_Category11",
+                                     label = "Choose a Category Type for Bar Plot",
+                                     choices = c( "Household Size" = "Household_Size",
+                                                  "Have Kids" = "Have_Kids",
+                                                  "Education Level" = "Education_Level",
+                                                  "Interest Group" = "Interest_Group",
+                                                  "Age Group" = "Age_Group",
+                                                  "Income Level" = "Income_Level",
+                                                  "Joviality" = "Joviality_Level"
+                                     ),
+                                     selected = "Household_Size"),
+                         br(),
+                         
+                         #uiOutput("filter1")
+                         
+                  ),
+                  
+                ),
+              
                 
       ),
       
@@ -86,6 +109,16 @@ ui <- fluidPage(
                                              "Age Group" = "Age_Group"
                                 ),
                                 selected = "Household_Size"),
+                    
+                    selectInput(inputId = "Category2",
+                                label = "Choose 2nd Category",
+                                choices = c( "Household Size" = "Household_Size",
+                                             "Have Kids" = "Have_Kids",
+                                             "Education Level" = "Education_Level",
+                                             "Interest Group" = "Interest_Group",
+                                             "Age Group" = "Age_Group"
+                                ),
+                                selected = "Age_Group"),
                     
                     selectInput(inputId = "workday",
                                 label = "Choose a Workday Type",
@@ -194,10 +227,18 @@ server <- function(input, output, session) {
   
   dataset <- reactive({
     interaction_all %>%
-      group_by(Participant_ID,MonthYear, .data[[input$Category]])%>%
+      group_by(Participant_ID,.data[[input$Category]],.data[[input$Category2]])%>%
       summarise(InteractionCount = n()) %>%
       filter(InteractionCount > 1) %>%
       ungroup
+  })
+  
+  dataset1 <- reactive({
+    total_data %>%
+      select(Id,type,.data[[input$Weekday]]) %>%
+      rename(
+        "earn" = input$Weekday
+      )
   })
   
   ggstatsplot <- reactive({
@@ -240,10 +281,11 @@ server <- function(input, output, session) {
    
    output$treemapPlot <- renderD3tree3({
      d3tree3(
-       treemap(dataset(),
-               index = c(input$Category,"Participant_ID"),
+       treemap(interaction_all,
+               index = c(input$Category,input$Category2, "Participant_ID"),
                vSize = "InteractionCount",
-               type = "index",
+               type = "value",
+               vColor = "InteractionCount",
                palette="Set2",
                title="Interaction Count of Participant",
                title.legend = "Interaction Count"
@@ -310,16 +352,17 @@ server <- function(input, output, session) {
     output$typePlot <- renderPlot({
 
       ggbetweenstats(
-        data = total_data,
+        data = dataset1(),
         x = type,
-        y = input$Weekday,
+        y = earn,
         type = input$testType,
         xlab = "Business Type",
         ylab = "Revenue",
         p.adjust.method = input$pvalueType,
         palette = "Set3",
         plot.type = input$plotType,
-        ggtheme = ggplot2::theme_gray()
+        ggtheme = ggplot2::theme_gray()+ theme(axis.title.y= element_text(angle=0)),
+        title = paste0(input$Weekday,"Revenue of Pubs and Restaurants ")
       )
       
     })
