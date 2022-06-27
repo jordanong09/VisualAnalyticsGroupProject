@@ -8,9 +8,147 @@ for(p in packages){
   library(p, character.only = T)
 }
 
-finance <- read_csv("qn2/rawdata/FinancialJournal.csv")
-Part_nodes <- readRDS("data/Participant_Details.rds")
-Social_edge <- read_csv("qn2/rawdata/SocialNetwork.csv")
+#finance <- read_csv("qn2/rawdata/FinancialJournal.csv")
+#Part_nodes <- readRDS("data/Participant_Details.rds")
+#Social_edge <- read_csv("rawdata/SocialNetwork.csv")
+check_in <- read_csv("rawdata/CheckinJournal.csv")
+apartments<- read_csv("rawdata/Apartments.csv")
+travel <- read_csv("rawdata/TravelJournal.csv")
+buildings <- read_sf("data/Buildings.csv", 
+                     options = "GEOM_POSSIBLE_NAMES=location")
+
+
+########################Revenue of Pubs and Restaurant ###################################################
+travel_cost <- travel %>%
+  mutate (expenses = abs(startingBalance - endingBalance))
+
+travel_cost <- travel_cost %>%
+  filter (travelEndLocationId %in% total_month_data$Id) %>%
+  mutate (MonthYear = month(travelStartTime,
+                            label = TRUE,
+                            abbr = TRUE)) %>%
+  mutate (Year = year(travelStartTime)) %>%
+  mutate (Weekday = wday(travelStartTime,
+                         label = TRUE,
+                         abbr = FALSE)) %>%
+  mutate (workday = case_when(
+    Weekday %in% work_day ~ "Working Day",
+    TRUE ~ "Non-Working Day"
+  )) %>%
+  select(-travelStartLocationId, -travelStartTime, -travelEndTime,-purpose,-checkInTime, -checkOutTime, -startingBalance, -endingBalance) %>%
+  rename ("Id" = "travelEndLocationId")
+
+travel_visit_monthly <- travel_cost %>%
+  group_by(Id,MonthYear,Year,workday) %>%
+  summarise(Visit = n())
+
+travel_cost_monthly <- travel_cost %>%
+  group_by(Id,MonthYear,Year,workday) %>%
+  summarise(Expenses = sum(expenses), Visit = n())
+
+travel_cost_monthly_1 <- travel_cost_monthly %>%
+  unite('DateMonth',MonthYear:Year, sep= " ")
+
+Pubs <- read_sf("rawdata/Pubs.csv", 
+                options = "GEOM_POSSIBLE_NAMES=location")
+Restaurants <- read_sf("rawdata/Restaurants.csv", 
+                       options = "GEOM_POSSIBLE_NAMES=location")
+
+Pubs$Type <- "Pubs"
+Restaurants$Type <- "Restaurant"
+
+Pubs <- Pubs %>%
+  rename("Id" = "pubId") %>%
+  select(Id,maxOccupancy,location,Type)
+
+Restaurants <- Restaurants %>%
+  rename("Id" = "restaurantId") %>%
+  select(Id,maxOccupancy,location,Type)
+
+Venue_Details <- rbind(Pubs,Restaurants)
+
+month_level = c("Mar 2022", "Apr 2022", "May 2022", "Jun 2022", "Jul 2022", "Aug 2022", "Sep 2022", "Oct 2022", "Nov 2022", "Dec 2022", "Jan 2023", "Feb 2023", "Mar 2023", "Apr 2023", "May 2023")
+travel_cost_monthly_1$DateMonth <- factor(travel_cost_monthly_1$DateMonth, levels=month_level)
+
+
+business_plot <- merge(Venue_Details,travel_cost_monthly_1, by = "Id", all.x = TRUE, all.y = TRUE)
+
+x <- 1
+
+business_plot$long <- sapply(business_plot$geometry, "[", 1)
+business_plot$lat <- sapply(business_plot$geometry, "[", 2)
+
+business_plot <- business_plot %>%
+  select (-geometry)
+
+business_plot <- dplyr::select(as.data.frame(business_plot), -geometry)
+
+test <- business_plot %>%
+  filter(
+    if (x != 2) {
+      workday == workday
+    } else {
+      workday == "Working Day"
+    }
+  ) %>%
+  group_by(Id, Type, long, lat) %>%
+  summarise (Expenses = sum(Expenses)) %>%
+  ungroup
+
+saveRDS(business_plot, "business_plot.rds")
+########################Revenue of Pubs and Restaurant ###################################################
+
+
+#Check Where Non_Resident Work
+check_in_nonR <- check_in %>%
+  filter (venueType == "Workplace") %>%
+  filter (!(participantId %in% `Participant_Details(880)`$`Participant ID`)) %>%
+  group_by (participantId, venueId) %>%
+  summarise (count = n())
+
+check_in_check <- check_in_new %>%
+  group_by(venueId) %>%
+  summarise (count = n()) %>%
+  rename ( "apartmentId" = "venueId")
+
+newguide <- check_in_check %>%
+  left_join(apartments,by = "apartmentId")
+
+newguide$buildingId <- as.character(newguide$buildingId)
+
+hey <- newguide %>%
+  group_by(buildingId) %>%
+  summarise(Freq = sum(count))
+
+new_guide1 <- aggregate(newguide$count, by=list(buildingId=newguide$buildingId), FUN=sum)
+
+buildings <- read_sf("data/Buildings.csv", 
+                     options = "GEOM_POSSIBLE_NAMES=location")
+
+buildings <- buildings %>%
+  left_join(hey, by="buildingId")
+
+tm_shape(buildings)+
+  tm_polygons(col = "Freq",
+              size = 1,
+              border.col = "black",
+              border.lwd = 1)
+
+
+Participant_Details <- participant_interaction %>%
+  select(-No_of_Workplace) %>%
+  left_join(check_in_new, by = "Participant ID")
+
+
+check <- check_in_check$participantId
+
+Participant_Details <- as.data.frame(Participant_Details)
+
+Participant_Details <- st_drop_geometry(Participant_Details)
+
+check_Part <- Participant_Details %>%
+  filter (!(Participant_ID %in% check))
+
 
 finance_new <- finance %>% 
   filter (category == "Wage") %>%
@@ -66,10 +204,39 @@ Part_nodes <- merge(financeJ_2,Part_nodes, by = "Participant_ID", all.x = TRUE, 
 work_day <- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
 
 Social_edge_selected <- Social_edge %>%
-  mutate (Month = month(timestamp,
+  mutate (MonthYear = month(timestamp,
                         label = TRUE,
                         abbr = TRUE)) %>%
-  mutate (Year = year(timestamp))
+  mutate (Year = year(timestamp)) %>%
+  mutate (Weekday = wday(timestamp,
+                         label = TRUE,
+                         abbr = FALSE)) %>%
+  mutate (workday = case_when(
+    Weekday %in% work_day ~ "Working Day",
+    TRUE ~ "Non-Working Day"
+  ))
+
+
+check_in_data <- check_in %>%
+  mutate (Month = month(timestamp,
+                            label = TRUE,
+                            abbr = TRUE)) %>%
+  mutate (Year = year(timestamp)) %>%
+  mutate (Weekday = wday(timestamp,
+                         label = TRUE,
+                         abbr = FALSE)) %>%
+  mutate (workday = case_when(
+    Weekday %in% work_day ~ "Working Day",
+    TRUE ~ "Non-Working Day"
+  ))
+  
+
+parti <- Participant_Details %>%
+  filter (Type == "Resident")
+
+final_social_edge <- Social_edge_selected %>%
+  filter (participantIdFrom %in% parti$Participant_ID)
+  
 
 
 
@@ -90,7 +257,8 @@ Social_edge_selected_workdays <- Social_edge %>%
     day <= 7 ~ 1,
     day <= 14 ~ 2,
     day <= 21 ~ 3,
-    day <= 31 ~ 4
+    day <= 28 ~ 4,
+    TRUE ~ 5
   )) %>%
   mutate (workday = case_when(
     Weekday %in% work_day ~ "Working Day",
@@ -103,75 +271,119 @@ social_edge_plot <- Social_edge_selected_workdays %>%
   summarise(Weight = n())
   
 
+Participant_Details <- Participant_Details %>%
+  rename ("Region" = "region")
 
-Social_edge_aggregated <- Social_edge_selected_workdays %>% 
-  group_by(participantIdFrom,participantIdTo,workday) %>%
+saveRDS (final_social_edge, "social_interaction.rds")
+saveRDS (Participant_Details, "participant_interaction.rds")
+
+
+Social_edge_aggregated_workday <- Social_edge_selected %>%
+  filter(Month == "Aug" & Year == 2022 & workday == "Working Day") %>%
+  group_by(participantIdFrom,participantIdTo) %>%
   summarise(Weight = n()) %>%
   filter (participantIdFrom != participantIdTo) %>%
   filter (Weight > 1) %>%
   ungroup
 
-Part_nodes_aggregated_workingday <- Participant_Details %>%
-  filter (Participant_ID  %in% c(Social_edge_aggregated_workingday$participantIdFrom, Social_edge_aggregated_workingday$participantIdTo))
+Social_edge_aggregated_nonworkday <- Social_edge_selected %>%
+  filter(Month == "Aug" & Year == 2022 & workday == "Non-Working Day") %>%
+  group_by(participantIdFrom,participantIdTo) %>%
+  summarise(Weight = n()) %>%
+  filter (participantIdFrom != participantIdTo) %>%
+  filter (Weight > 1) %>%
+  ungroup
+
+
+Social_edge_aggregated <- Social_edge_aggregated %>%
+  filter (participantIdTo %in% social_check$participantIdTo)
+
+Part_nodes_aggregated_workday <- Participant_Details %>%
+  filter (Participant_ID  %in% c(Social_edge_aggregated_workday$participantIdFrom, Social_edge_aggregated_workday$participantIdTo))
 
 Part_nodes_aggregated_non_workingday <- Participant_Details %>%
-  filter (Participant_ID  %in% c(Social_edge_aggregated_non_workingday$participantIdFrom, Social_edge_aggregated_non_workingday$participantIdTo))
+  filter (Participant_ID  %in% c(Social_edge_aggregated_nonworkday$participantIdFrom, Social_edge_aggregated_nonworkday$participantIdTo))
 
 
-Social_edge_aggregated_workingday <- Social_edge_aggregated %>%
-  filter(workday == "Working Day")
-
-
-Social_edge_aggregated_non_workingday <- Social_edge_aggregated %>%
-  filter(workday == "Non-Working Day")
-
-
-social_graph_workingday <- graph_from_data_frame (Social_edge_aggregated_workingday,
-                                 vertices = Part_nodes_aggregated_workingday) %>%
+new_graph <- graph_from_data_frame (Social_edge_aggregated_workday,
+                                 vertices = participant_interaction) %>%
   as_tbl_graph()
 
-social_graph_non_workingday <- graph_from_data_frame (Social_edge_aggregated_non_workingday,
+social_graph_sep_nonworking <- graph_from_data_frame (Social_edge_aggregated_nonworkday,
                                                   vertices = Part_nodes_aggregated_non_workingday) %>%
   as_tbl_graph()
 
 
-V(social_graph_workingday)$degree <- degree(social_graph_workingday)
-V(social_graph_workingday)$eig <- evcent(social_graph_workingday)$vector
-V(social_graph_workingday)$hubs <- hub.score(social_graph_workingday)$vector
-V(social_graph_workingday)$authorities <- authority.score(social_graph_workingday)$vector
-V(social_graph_workingday)$closeness <- closeness(social_graph_workingday)
-V(social_graph_workingday)$betweenness <- betweenness(social_graph_workingday)
+V(social_graph_sep_working)$degree <- degree(social_graph_sep_working)
+V(social_graph_sep_working)$eig <- evcent(social_graph_sep_working)$vector
+V(social_graph_sep_working)$hubs <- hub.score(social_graph_sep_working)$vector
+V(social_graph_sep_working)$authorities <- authority.score(social_graph_sep_working)$vector
+V(social_graph_sep_working)$closeness <- closeness(social_graph_sep_working)
+V(social_graph_sep_working)$betweenness <- betweenness(social_graph_sep_working)
+V(social_graph_sep_working)$pagerank <- page_rank(social_graph_sep_working)$vector
 
-V(social_graph_non_workingday)$degree <- degree(social_graph_non_workingday)
-V(social_graph_non_workingday)$eig <- evcent(social_graph_non_workingday)$vector
-V(social_graph_non_workingday)$hubs <- hub.score(social_graph_non_workingday)$vector
-V(social_graph_non_workingday)$authorities <- authority.score(social_graph_non_workingday)$vector
-V(social_graph_non_workingday)$closeness <- closeness(social_graph_non_workingday)
-V(social_graph_non_workingday)$betweenness <- betweenness(social_graph_non_workingday)
+V(social_graph_sep_nonworking)$degree <- degree(social_graph_sep_nonworking)
+V(social_graph_sep_nonworking)$eig <- evcent(social_graph_sep_nonworking)$vector
+V(social_graph_sep_nonworking)$hubs <- hub.score(social_graph_sep_nonworking)$vector
+V(social_graph_sep_nonworking)$authorities <- authority.score(social_graph_sep_nonworking)$vector
+V(social_graph_sep_nonworking)$closeness <- closeness(social_graph_sep_nonworking)
+V(social_graph_sep_nonworking)$betweenness <- betweenness(social_graph_sep_nonworking)
+V(social_graph_sep_nonworking)$pagerank <- page_rank(social_graph_sep_nonworking)$vector
 
+social_graph_sep_working <- delete_vertices(social_graph_sep_working, V(social_graph_sep_working)[degree < quantile (V(social_graph_sep_working)$degree,0.9)])
 
-V(social_graph_workingday)$pagerank <- page_rank(social_graph_workingday)
-
-
-
-high_level <- quantile (V(social_graph_workingday)$eig,0.9)
-
-V(social_graph_workingday)$color <- ifelse (V(social_graph_workingday)$eig > high_level, "darkgoldenrod3", "azure3")
-V(social_graph_workingday)$size <- ifelse (V(social_graph_workingday)$eig > high_level, 2, 0.05)
-V(social_graph_workingday)$label <- ifelse (V(social_graph_workingday)$eig > high_level,V(social_graph_workingday)$name,NA)
-
-V(social_graph_workingday)$clu <- as.character(membership(cluster_edge_betweenness(social_graph_workingday)))
+ggraph(social_graph_sep_working) +
+  geom_edge_link(edge_colour = "peachpuff4", edge_width = 0.05) + 
+  geom_node_point(aes(size = ifelse (V(social_graph_sep_working)$degree > high_level, 4, 0.001))) +
+  geom_node_text ( aes(label = ifelse (V(social_graph_sep_working)$degree > high_level,V(social_graph_sep_working)$name,NA), repel = TRUE )) +
+  theme_graph()
 
 
-k1 <- cluster_walktrap(social_graph_workingday)
-k2 <- cluster_infomap(social_graph_workingday)
-k4 <-  biconnected.components(social_graph_workingday)
 
-V(social_graph_workingday)$infomap <- k2$membership
 
-sort(unique(V(social_graph_workingday)$infomap))
 
-plot(social_graph_workingday,layout=layout.mds, edge.arrow.size=0.1,edge.arrow.mode = "-", vertex.label.cex = 0.65, vertex.label.font = 1)
+
+
+
+V(new_graph)$degree <- degree(new_graph)
+new_graph <- delete_vertices(new_graph, V(new_graph)[degree < quantile (V(new_graph)$degree,0.9)])
+filter <- quantile (V(new_graph)$degree,0.9)
+V(new_graph)$size <- ifelse (V(new_graph)$degree > filter, 10, 0.01)
+V(new_graph)$color <- ifelse (V(new_graph)$degree > filter, "darkgoldenrod3", "azure3")
+V(new_graph)$label <- ifelse (V(new_graph)$degree > filter,V(new_graph)$name,NA)
+
+
+participant_interaction <- participant_interaction %>%as.character(participant_interaction$Participant_ID)
+
+new_table <- participant_interaction %>%
+  filter (as.character(Participant_ID) %in% V(new_graph)$label)
+
+plot(new_graph,layout=layout.mds, edge.arrow.size=0.1,edge.arrow.mode = "-", vertex.label.cex = 1, vertex.label.font = 2)
+
+
+low_level
+
+high_level <- quantile (V(x)$degree,0.99)
+high_level1 <- quantile (V(social_graph_sep_working)$eig,0.99)
+high_level2 <- quantile (V(social_graph_sep_working)$hubs,0.99)
+high_level3 <- quantile (V(social_graph_sep_working)$authorities,0.99)
+high_level4 <- quantile (V(social_graph_sep_working)$pagerank,0.99)
+
+
+V(social_graph_sep_working)$color <- ifelse (V(social_graph_sep_working)$degree > high_level, "darkgoldenrod3", "azure3")
+V(social_graph_jun)$size <- ifelse (V(social_graph_jun)$eig > high_level, 2, 0.05)
+V(social_graph_jun)$label <- ifelse (V(social_graph_jun)$eig > high_level,V(social_graph_jun)$name,NA)
+
+V(social_graph_jun)$clu <- as.character(membership(cluster_edge_betweenness(social_graph_jun)))
+
+
+vertex_attr(x, "name", index = V(x)$degree > high_level)
+vertex_attr(social_graph_sep_working, "name", index = V(social_graph_sep_working)$eig > high_level1)
+vertex_attr(social_graph_sep_working, "name", index = V(social_graph_sep_working)$hubs > high_level2)
+vertex_attr(social_graph_sep_working, "name", index = V(social_graph_sep_working)$authorities > high_level3)
+vertex_attr(social_graph_sep_working, "name", index = V(social_graph_sep_working)$pagerank > high_level4)
+
+plot(social_graph_jun,layout=layout.mds, edge.arrow.size=0.1,edge.arrow.mode = "-", vertex.label.cex = 0.65, vertex.label.font = 1)
 
 saveRDS(Part_nodes_aggregated_non_workingday,"SUREWORK.rds")
 saveRDS(social_graph_workingday,"social_graph_workingday.rds")
@@ -181,6 +393,15 @@ edge_attr(cgraph)
 
 cgraph <- delete_edges(cgraph, which(E(cgraph)$work_day == "Non-Working Days"))
 
+
+Treemap_Part <- Social_edge %>%
+  rename('Participant ID' = 'participantIdFrom') %>%
+  filter (`Participant ID` %in% Participant_Details$`Participant ID`) %>%
+  group_by(`Participant ID`) %>%
+  summarise (InteractionCount = n()) %>%
+  left_join(Participant_Details, by = "Participant ID")
+
+saveRDS(Treemap_Part, "Participant_Details.rds")
 
 Social_edge_all<- Social_edge %>%
   mutate (MonthYear = as.yearmon(timestamp,"%m/%Y")) %>%
@@ -197,6 +418,8 @@ as <- merge(Social_edge_selected_2022,Part_nodes, by = "Participant_ID")
 
 interaction_all <- merge(Social_edge_all,Part_nodes, by = "Participant_ID")
 
+
+
 trial <- interaction_all %>%
   group_by(Participant_ID) %>%
   mutate (InteractionCount = n()) %>%
@@ -207,42 +430,12 @@ trial$Age_Group <- as.character(trial$Age_Group)
 
 saveRDS(trial, "interaction_all.rds")
 
-as_1 <- as_all %>%
-  group_by(MonthYear,Household_Size) %>%
-  summarise(count = n()) %>%
-  ungroup
-
-
-
-as_2 <- as_all %>%
-  group_by(Participant_ID,MonthYear, Interest_Group)%>%
-  summarise(InteractionCount = n()) %>%
-  ungroup
-
-
-treemapPlot <- d3tree3(
-    treemap(as_2,
-            index = c("Interest_Group","Participant_ID"),
-            vSize = "InteractionCount",
-            type = "value",
-            vColor = "InteractionCount",
-            palette = "Set2",
-            )  
-    )
-
-
-treemapPlot
 
 
 index <- sample(1:nrow(Part_nodes_aggregated),100,replace = FALSE)
 random <- dput(Part_nodes_aggregated[index,])
 
 dput(head(cgraph))
-
-df<-c(12,3,4,56,78,18,46,78,100)
-quantile(df,0.9)
-
-
 
 
 total_data$type <- sub("pub","Pub",total_data$type)
