@@ -1,15 +1,10 @@
 library(shiny)
-library (igraph)
 library (tidygraph)
 library (ggraph)
-library (plotly)
 library (tmap)
 library (tidyverse)
 library (sf)
 library (ggstatsplot)
-library(treemap)
-#renv::install("d3treeR/d3treeR")
-library(d3treeR)
 library (igraph)
 library(ggsci)
 library (DT)
@@ -17,19 +12,17 @@ library(scales)
 
 
 Participant_Details <- readRDS("data/Participant_Details(880).rds")
-interaction <- readRDS("data/participant_interaction.rds")
+nonParticipant_Details <- readRDS("data/Participant_Details(131).rds")
 total_data <- read_rds('data/business_plot.rds')
 buildings <- read_sf("data/Buildings.csv", 
                      options = "GEOM_POSSIBLE_NAMES=location")
 
-resto_month2 <- read_rds('data/resto_month2.rds')
-total_month_data <- read_rds('data/total_month_data_new.rds')
 
 recreation_visit <- readRDS("data/recreation_visit.rds")
 social_interaction <- readRDS("data/social_interaction_all.rds")
-participant_interaction <- readRDS("data/participant_interaction.rds")
 residential_data <- readRDS("data/Residential_Details.rds")
 residential_data_sf <- st_as_sf(residential_data)
+
 
 color_palettes <- c("#e485a4",
   "#58bc51",
@@ -78,34 +71,9 @@ ui <- fluidPage(
                                        "Non-Resident"),
                            selected = "Resident"
                          ),
-                         selectInput(inputId = "Demo_Category",
-                                     label = "Choose a Category Type for Bar Plot",
-                                     choices = c( "Household Size" = "Household Size",
-                                                  "Have Kids" = "Have Kids",
-                                                  "Education Level" = "Education Level",
-                                                  "Interest Group" = "Interest Group",
-                                                  "Age Group" = "Age Group",
-                                                  "Income Level" = "Income Level",
-                                                  "Joviality" = "Joviality Level",
-                                                  "Residence" = "Residence Region",
-                                                  "Workplace" = "Workplace Region"
-                                     ),
-                                     selected = "Household Size"),
+                         uiOutput("Demo_Category"),
                          br(),
-                         
-                         selectInput(inputId = "Demo_Category1",
-                                     label = "Choose a 2nd Category Type for Statistical Plot",
-                                     choices = c( "Household Size" = "Household Size",
-                                                  "Have Kids" = "Have Kids",
-                                                  "Education Level" = "Education Level",
-                                                  "Interest Group" = "Interest Group",
-                                                  "Age Group" = "Age Group",
-                                                  "Income Level" = "Income Level",
-                                                  "Joviality" = "Joviality Level",
-                                                  "Residence" = "Residence Region",
-                                                  "Workplace" = "Workplace Region"
-                                     ),
-                                     selected = "Have Kids"),
+                         uiOutput("Demo_Category1"),
                          
                   ),
                   column (4,
@@ -301,7 +269,9 @@ ui <- fluidPage(
                          plotOutput("typePlot")
                          ),
                   column(4, 
-                         plotOutput("tMapEarnings"))       
+                         plotOutput("tMapEarnings", click = "plot_click"),
+                         h4("Clicked Points"),
+                         verbatimTextOutput("plot_clickedpoints"))       
                          ),
                   
                 ),
@@ -309,14 +279,31 @@ ui <- fluidPage(
     ),
 )
 
-
+############################################################SERVER###########################################################################
 server <- function(input, output, session) {
   
   ##Reactive Values for Demographics Plot
   
   demo_dataset <- reactive({
-    Participant_Details %>%
-      filter (Type == input$Demo_Resident)
+    if (input$Demo_Resident == "Resident") {
+      Participant_Details <- Participant_Details[, sapply(Participant_Details, class) %in% c('character', 'factor')]
+      Participant_Details
+    } else {
+      nonParticipant_Details <- nonParticipant_Details[, sapply(nonParticipant_Details, class) %in% c('character', 'factor')]
+      nonParticipant_Details
+    }
+  })
+  
+  output$Demo_Category<- renderUI({
+    
+    selectInput("demo_category","Choose X Axis Variable for Bar Plot:", choices=colnames(demo_dataset())[names(demo_dataset()) !="Participant ID"])
+    
+  })
+  output$Demo_Category1<- renderUI({
+    
+    req(input$demo_category)
+    selectInput("demo_category1","Choose Variable for Statsitical Plot:", choices=colnames(demo_dataset())[names(demo_dataset()) %in% c("Participant ID", input$demo_category) == FALSE])
+    
   })
   
   
@@ -477,14 +464,14 @@ server <- function(input, output, session) {
    
    output$barPlot <- renderPlot({
      ggplot(demo_dataset(),
-            aes(x = .data[[input$Demo_Category]])) + 
+            aes(x = .data[[input$demo_category]])) + 
        geom_bar(fill= '#E15E8E') +
        geom_text(stat = 'count',
                  aes(label= paste0(stat(count), ', ', 
                                    round(stat(count)/sum(stat(count))*100, 
                                          1), '%')), vjust= -0.5, size= 2.5) +
-       labs(y= 'No. of\nResidents', x= input$Demo_Category,
-            title = paste0("Distribution of Residents by ",input$Demo_Category)) +
+       labs(y= 'No. of\nResidents', x= input$demo_category,
+            title = paste0("Distribution of Residents by ",input$demo_category)) +
        theme(axis.title.y= element_text(angle=0), axis.ticks.x= element_blank(),
              panel.background= element_blank(), axis.line= element_line(color= 'grey'), legend.position="none",
              plot.title = element_text(size = 14, face = "bold")) 
@@ -492,15 +479,19 @@ server <- function(input, output, session) {
    })
    
    output$demostatsPlot <- renderPlot({
+     req(input$demo_category1)
+     
      ggbarstats(
        data     = demo_dataset(),
-       x = !!rlang::sym(input$Demo_Category),
-       y = !!rlang::sym(input$Demo_Category1),
-       title            = paste0("Correlation of ",input$Demo_Category," and ", input$Demo_Category1),
-       xlab             = input$Demo_Category,
-       legend.title     = input$Demo_Category1,
+       x = !!rlang::sym(input$demo_category),
+       y = !!rlang::sym(input$demo_category1),
+       title = paste0("Correlation of ",input$demo_category," and ", input$demo_category1),
+       xlab = input$demo_category,
+       ylab = input$demo_category1,
        ggplot.component = list(ggplot2::scale_x_discrete(guide = ggplot2::guide_axis(n.dodge = 2))),
-       palette          = "Set2"
+       ggtheme = ggplot2::theme_classic() + theme(axis.title.y= element_text(angle=0),
+                                                  plot.title = element_text(size = 12, face = "bold", hjust=0.5)),
+       palette  = "Set2"
      )
      
    })
@@ -539,24 +530,6 @@ server <- function(input, output, session) {
      
    })
    
-   
-   ##Plot for Social Network Tabs
-   
-   
-   # output$treemapPlot <- renderD3tree3({
-   #   d3tree3(
-   #     treemap(Participant_Details,
-   #             index = c(input$social_category, input$social_category1),
-   #             vSize = "InteractionCount",
-   #             type = "value",
-   #             vColor = "InteractionCount",
-   #             palette="Set2",
-   #             title="Interaction Count of Participant",
-   #             title.legend = "Interaction Count"
-   #     ), 
-   #     rootname = "Tree Map of Interaction Count by Participant"
-   #   )
-   # })
    
    output$treemapPlot <- renderPlot({
      ggplot(recreation_data(), aes(x = .data[[input$socialfilter]], y = Visitcount, fill = .data[[input$socialfilterfill]])) +
@@ -705,6 +678,15 @@ server <- function(input, output, session) {
         ggtitle(paste0(input$Weekday," Revenue of Pubs and Restaurants "), subtitle = "(20 Restaurants and 12 Pubs)") +
         theme(panel.grid.major = element_line(color = gray(0.5), linetype = "dashed", 
                                               size = 0.5), panel.background = element_rect(fill = "aliceblue"))
+    })
+    
+    output$plot_clickedpoints <- renderTable({
+      # For base graphics, we need to specify columns, though for ggplot2,
+      # it's usually not necessary.
+      res <- nearPoints(ggstatsplot1(), input$plot_click, addDist = TRUE)
+      if (nrow(res) == 0)
+        return()
+      res
     })
 }
 
