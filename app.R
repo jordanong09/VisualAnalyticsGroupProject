@@ -25,6 +25,9 @@ buildings <- read_sf("data/Buildings.csv",
 resto_month2 <- read_rds('data/resto_month2.rds')
 total_month_data <- read_rds('data/total_month_data_new.rds')
 
+recreation_visit <- readRDS("data/recreation_visit.rds")
+
+
 # grid_data <- readRDS('data/grid_data.rds')
 # base_data <- readRDS('data/base_data.rds')
 # label_data <- readRDS('data/label_data.rds')
@@ -34,6 +37,31 @@ social_interaction <- readRDS("data/social_interaction.rds")
 participant_interaction <- readRDS("data/participant_interaction.rds")
 residential_data <- readRDS("data/Residential_Details.rds")
 residential_data_sf <- st_as_sf(residential_data)
+
+color_palettes <- c("#e485a4",
+  "#58bc51",
+  "#a55bd1",
+  "#a1b534",
+  "#596dd1",
+  "#d69c35",
+  "#5d8bc9",
+  "#de5d2f",
+  "#44bcd1",
+  "#d3414c",
+  "#5dc497",
+  "#d353ad",
+  "#4d8a39",
+  "#d03d74",
+  "#368660",
+  "#89529a",
+  "#aab267",
+  "#bf8ed7",
+  "#697329",
+  "#9c4970",
+  "#936a2e",
+  "#b05b5c",
+  "#e1966b",
+  "#ae502c")
 
 
 # Define UI for application that draws a histogram
@@ -140,32 +168,33 @@ ui <- fluidPage(
                 fluidRow(
                   column (3,
                               helpText(" Visualise the Social Network Interaction of the Population in Ohio"),
-                              selectInput(inputId = "social_category",
-                                          label = "Choose a Category",
-                                          choices = c( "Household Size",
-                                                       "Have Kids",
-                                                       "Education Level",
-                                                       "Interest Group",
-                                                       "Age Group"
-                                          ),
-                                          selected = "Household Size"),
+                              checkboxGroupInput( inputId = "social_checkbox",
+                                                  label = "Select variables to group:",
+                                                  choices = c(
+                                                    "Participant Id" = "Participand Id",
+                                                    "Pub Id",
+                                                    "Month Year" = "Dates",
+                                                    "Time of Day (hours)" = "Time Period",
+                                                    "Weekday type (Mon-Sun)" = "Weekday",
+                                                    "Workday type (Working/Non-Working)" = "Workday Type",
+                                                    "Period of Day (Morning - Midnight)" = "Session",
+                                                    "Region of Pub" = "Region"
+                                                  )),
                               
-                              selectInput(inputId = "social_category1",
-                                          label = "Choose 2nd Category",
-                                          choices = c( "Household Size",
-                                                       "Have Kids",
-                                                       "Education Level",
-                                                       "Interest Group",
-                                                       "Age Group"
-                                          ),
-                                          selected = "Age Group")
+                          uiOutput("socialFilter"),
+                          uiOutput("socialFilterfill")
+                          
                               
                   
                 ),
                 
+                column (3,
+                        plotOutput("treemapPlot")
+                        ),
+                
                 column (6,
-                        d3treeOutput("treemapPlot"),
-                        )
+                        plotOutput("socialstatsPlot")
+                )
         
         
       ),
@@ -329,6 +358,23 @@ server <- function(input, output, session) {
    
    ##Reactive Values for Social Network Plot
   
+  recreation_data <- reactive ({
+    req(input$social_checkbox)
+  
+    recreation_visit %>%
+      group_by(!!! rlang::syms(input$social_checkbox)) %>%
+      summarise(Visitcount = n())
+      
+  })
+  
+  output$socialFilter <- renderUI({
+    selectInput("socialfilter","Choose X Axis Variable for Bar Plot:", choices=colnames(recreation_data())[names(recreation_data()) !="Visitcount"])
+  })
+  
+  output$socialFilterfill <- renderUI({
+    selectInput("socialfilterfill","Choose Fill Variable for Bar Plot:", choices=colnames(recreation_data())[names(recreation_data()) !="Visitcount"])
+  })
+  
   social_data <- reactive ({
     social_interaction %>%
       filter(Month == input$month & workday == input$workday) %>%
@@ -479,19 +525,49 @@ server <- function(input, output, session) {
    ##Plot for Social Network Tabs
    
    
-   output$treemapPlot <- renderD3tree3({
-     d3tree3(
-       treemap(Participant_Details,
-               index = c(input$social_category, input$social_category1),
-               vSize = "InteractionCount",
-               type = "value",
-               vColor = "InteractionCount",
-               palette="Set2",
-               title="Interaction Count of Participant",
-               title.legend = "Interaction Count"
-       ), 
-       rootname = "Tree Map of Interaction Count by Participant"
+   # output$treemapPlot <- renderD3tree3({
+   #   d3tree3(
+   #     treemap(Participant_Details,
+   #             index = c(input$social_category, input$social_category1),
+   #             vSize = "InteractionCount",
+   #             type = "value",
+   #             vColor = "InteractionCount",
+   #             palette="Set2",
+   #             title="Interaction Count of Participant",
+   #             title.legend = "Interaction Count"
+   #     ), 
+   #     rootname = "Tree Map of Interaction Count by Participant"
+   #   )
+   # })
+   
+   output$treemapPlot <- renderPlot({
+     ggplot(recreation_data(), aes(x = .data[[input$socialfilter]], y = Visitcount, fill = .data[[input$socialfilterfill]])) +
+       geom_bar(stat = "identity", position = "dodge") + 
+       scale_fill_manual(values = color_palettes) +
+       theme_classic() +
+       labs(y= 'No. of\n Visits', x= input$socialfilter,
+            title = paste0("Number of Visits to Pubs by ", input$socialfilter)) +
+       theme(axis.title.y= element_text(angle=0), axis.ticks.x= element_blank(),
+             panel.background= element_blank(), axis.line= element_line(color= 'grey'),
+             plot.title = element_text(size = 14, face = "bold")) 
+       
+   })
+   
+   
+   output$socialstatsPlot <- renderPlot({
+     
+     ggbetweenstats(
+       data = recreation_data(),
+       x = !!rlang::sym(input$socialfilter),
+       y = Visitcount,
+       xlab = input$socialfilter,
+       ylab = "VisitCount",
+       ggtheme = ggplot2::theme_classic() + theme(axis.title.y= element_text(angle=0),
+                                                  plot.title = element_text(size = 14, face = "bold", hjust=0.5)),
+       ggplot.component = ggplot2::scale_color_manual(values = color_palettes),
+       title = paste0("Visit Count of Pubs by ", input$socialfilter)
      )
+     
    })
    
    
@@ -567,10 +643,10 @@ server <- function(input, output, session) {
        xlab = "Mon/Year",
        ylab = "Revenue",
        p.adjust.method = input$pvalueType,
-       palette = "Set3",
        plot.type = input$plotType,
        ggtheme = ggplot2::theme_classic() + theme(axis.title.y= element_text(angle=0),
                                                plot.title = element_text(size = 14, face = "bold", hjust=0.5)),
+       ggplot.component = ggplot2::scale_color_manual(values = color_palettes),
        title = paste0("Revenue of ", input$ggstatfilter, "s for different Months")
      )
      
@@ -606,14 +682,9 @@ server <- function(input, output, session) {
         theme_graph() + 
         labs(color = "Revenue", shape = 'Venue Type') +
         guides(size = "none") +
-        ggtitle("Observation Sites", subtitle = "(20 Restaurants and 12 Pubs)") +
+        ggtitle(paste0(input$Weekday," Revenue of Pubs and Restaurants "), subtitle = "(20 Restaurants and 12 Pubs)") +
         theme(panel.grid.major = element_line(color = gray(0.5), linetype = "dashed", 
                                               size = 0.5), panel.background = element_rect(fill = "aliceblue"))
-    })
-    
-    output$info <- renderPrint({
-      nearPoints(ggstatsplot1(), input$plot_click, threshold = 10, maxpoints = 1,
-                 addDist = TRUE)
     })
 }
 

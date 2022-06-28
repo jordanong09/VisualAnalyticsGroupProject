@@ -38,11 +38,155 @@ travel_cost <- travel_cost %>%
   select(-travelStartLocationId, -travelStartTime, -travelEndTime,-purpose,-checkInTime, -checkOutTime, -startingBalance, -endingBalance) %>%
   rename ("Id" = "travelEndLocationId")
 
+
+travel_cost_monthly <- travel_cost %>%
+  group_by(Id,MonthYear,Year,workday) %>%
+  summarise(Expenses = sum(expenses), Visit = n())
+
 travel_visit_monthly <- travel_cost %>%
   group_by(Id,MonthYear,Year,workday) %>%
   summarise(Visit = n())
 
-travel_cost_monthly <- travel_cost %>%
+
+travel_cost_monthly_1 <- travel_cost_monthly %>%
+  unite('DateMonth',MonthYear:Year, sep= " ")
+
+Pubs <- read_sf("rawdata/Pubs.csv", 
+                options = "GEOM_POSSIBLE_NAMES=location")
+Restaurants <- read_sf("rawdata/Restaurants.csv", 
+                       options = "GEOM_POSSIBLE_NAMES=location")
+
+Pubs$Type <- "Pubs"
+Restaurants$Type <- "Restaurant"
+
+Pubs <- Pubs %>%
+  rename("Id" = "pubId") %>%
+  select(Id,maxOccupancy,location,Type)
+
+Restaurants <- Restaurants %>%
+  rename("Id" = "restaurantId") %>%
+  select(Id,maxOccupancy,location,Type)
+
+Venue_Details <- rbind(Pubs,Restaurants)
+
+month_level = c("Mar 2022", "Apr 2022", "May 2022", "Jun 2022", "Jul 2022", "Aug 2022", "Sep 2022", "Oct 2022", "Nov 2022", "Dec 2022", "Jan 2023", "Feb 2023", "Mar 2023", "Apr 2023", "May 2023")
+travel_cost_monthly_1$DateMonth <- factor(travel_cost_monthly_1$DateMonth, levels=month_level)
+
+
+business_plot <- merge(Venue_Details,travel_cost_monthly_1, by = "Id", all.x = TRUE, all.y = TRUE)
+
+x <- 1
+
+business_plot$long <- sapply(business_plot$geometry, "[", 1)
+business_plot$lat <- sapply(business_plot$geometry, "[", 2)
+
+business_plot <- business_plot %>%
+  select (-geometry)
+
+business_plot <- dplyr::select(as.data.frame(business_plot), -geometry)
+
+test <- business_plot %>%
+  filter(
+    if (x != 2) {
+      workday == workday
+    } else {
+      workday == "Working Day"
+    }
+  ) %>%
+  group_by(Id, Type, long, lat) %>%
+  summarise (Expenses = sum(Expenses), Visit = sum(Visit)) %>%
+  ungroup
+
+saveRDS(business_plot, "business_plot.rds")
+########################Revenue of Pubs and Restaurant ###################################################
+
+
+
+########################Social Activities of Pubs ###################################################
+work_day <- c("Mon", "Tue", "Wed", "Thu", "Fri")
+
+morning <- c(6:12)
+afternoon <- c(13:18)
+night <- c(19:23)
+
+recreation_visit <- travel %>%
+  filter (purpose == "Recreation (Social Gathering)") %>%
+  mutate (MonthYear = month(travelStartTime,
+                            label = TRUE,
+                            abbr = TRUE)) %>%
+  mutate (Year = year(travelStartTime)) %>%
+  mutate (Hour = hour(checkInTime)) %>%
+  mutate (Hour = hour(checkOutTime)) %>%
+  mutate (Weekday = wday(travelStartTime,
+                         label = TRUE,
+                         abbr = TRUE)) %>%
+  mutate (workday = case_when(
+    Weekday %in% work_day ~ "Working Day",
+    TRUE ~ "Non-Working Day"
+  )) %>%
+  mutate (session = case_when(
+    Hour < 6 ~ "Midnight",
+    Hour < 13 ~ "Morning",
+    Hour < 19 ~ "Afternoon",
+    TRUE ~ "Evening"
+  )) %>%
+  select(-travelStartLocationId, -travelStartTime, -travelEndTime,-purpose,-checkInTime, -checkOutTime, -startingBalance, -endingBalance) %>%
+  rename ("Id" = "travelEndLocationId")
+
+month_levels <- c("Mon", "Tue", "Wed", "Thu", "Fri","Sat", "Sun")
+session_levels <- c("Morning", "Afternoon", "Evening", "Midnight")
+
+recreation_visit$Weekday <- factor(recreation_visit$Weekday , levels=month_levels)
+recreation_visit$session <- factor(recreation_visit$session , levels=session_levels)
+recreation_visit$Dates <- factor(recreation_visit$Dates, levels=month_level)
+
+
+recreation_visit <- recreation_visit %>%
+  unite('DateMonth',MonthYear:Year, sep= " ")
+
+recreation_visit <- recreation_visit %>%
+  rename (
+    "Participant Id" = "participantId",
+    "Pub Id" = "Id",
+    "Dates"  = "DateMonth",
+    "Time Period" = "Hour",
+    "Workday Type" = "workday",
+    "Session" = "session"
+  )
+
+travel_visit_monthly <- recreation_visit %>%
+  group_by(Session,Weekday,Dates) %>%
+  summarise(Visit = n())
+
+x <- subset(travel_visit_monthly, select=-c(Visit))
+
+x <- colnames(travel_visit_monthly)[names(travel_visit_monthly) !="Visit"]
+
+
+new_travel_visit_monthly_region <- travel_visit_monthly %>%
+  left_join(Region_long, by = c("Id"="units"))
+
+
+ggplot(new_travel_visit_monthly_region, aes(x = Weekday, y = Visit, fill = session)) +
+  geom_bar(stat = "identity", position = "dodge")
+
+count <- travel_visit_monthly %>%
+  group_by (Id) %>%
+  summarise (count = n())
+
+part_vist <- recreation_visit %>%
+  group_by (participantId) %>%
+  summarise (count = n())
+
+
+numbers <- recreation_visit %>%
+  left_join (Region_long, by = c("Pub Id" = "units")) %>%
+  select (-geometry)
+
+recreation_visit <- numbers %>%
+  rename("Region" = "region")
+
+travel_cost_total_session <- travel_cost %>%
   group_by(Id,MonthYear,Year,workday) %>%
   summarise(Expenses = sum(expenses), Visit = n())
 
@@ -92,10 +236,15 @@ test <- business_plot %>%
     }
   ) %>%
   group_by(Id, Type, long, lat) %>%
-  summarise (Expenses = sum(Expenses)) %>%
+  summarise (Expenses = sum(Expenses), Visit = sum(Visit)) %>%
   ungroup
 
-saveRDS(business_plot, "business_plot.rds")
+time_levels <- c(0:23)
+
+recreation_visit$`Time Period` <- as.ch
+recreation_visit$`Time Period` <- factor(recreation_visit$`Time Period`, levels=time_levels)
+
+saveRDS(recreation_visit, "recreation_visit.rds")
 ########################Revenue of Pubs and Restaurant ###################################################
 
 
