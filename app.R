@@ -26,14 +26,7 @@ resto_month2 <- read_rds('data/resto_month2.rds')
 total_month_data <- read_rds('data/total_month_data_new.rds')
 
 recreation_visit <- readRDS("data/recreation_visit.rds")
-
-
-# grid_data <- readRDS('data/grid_data.rds')
-# base_data <- readRDS('data/base_data.rds')
-# label_data <- readRDS('data/label_data.rds')
-# social_circular_barplot <- readRDS('data/social_circular_barplot.rds')
-
-social_interaction <- readRDS("data/social_interaction.rds")
+social_interaction <- readRDS("data/social_interaction_all.rds")
 participant_interaction <- readRDS("data/participant_interaction.rds")
 residential_data <- readRDS("data/Residential_Details.rds")
 residential_data_sf <- st_as_sf(residential_data)
@@ -206,21 +199,8 @@ ui <- fluidPage(
                 helpText(" Visualise the top 1% influential people in Ohio based on Month and Day"),
                 selectInput(inputId = "month",
                             label = "Choose a Month",
-                            choices = c( "Jan",
-                                         "Feb",
-                                         "Mar",
-                                         "Apr",
-                                         "May",
-                                         "Jun",
-                                         "Jul",
-                                         "Aug",
-                                         "Sept",
-                                         "Oct",
-                                         "Nov",
-                                         "Dec"
-                                         
-                            ),
-                            selected = "Jan"),
+                            choices = unique(social_interaction$MonYear),
+                            selected = "Mar 2022"),
                 selectInput(inputId = "workday",
                                 label = "Choose a Workday Type",
                                 choices = c( "Working Day",
@@ -229,23 +209,31 @@ ui <- fluidPage(
                                 selected = "Working Days"),
                     
                     
-                    selectInput(inputId = "network",
+                selectInput(inputId = "network",
                                 label = "Choose a Network Centrality Measure",
-                                choices = c( "Degree Centrality" = "degree",
-                                             "Eigenvector Centrality" = "eig",
+                                choices = c( "Degree Centrality",
+                                             "Eigenvector Centrality",
                                              "Hub Centrality" = "hubs",
                                              "Authority Centrality" = "authorities",
                                              "Closeness Centrality" = "closeness",
-                                             "PageRank Centrality" = "pagerank"
+                                             "PageRank Centrality"
                                 ),
-                                selected = "degree")
+                                selected = "Degree Centrality"),
+                
+                uiOutput("networkstatsFilter")
                     
                 ),
         
         column (5,
                 plotOutput("socialPlot")),
-        
         column (4,
+                plotOutput("networkstatsPlot"))
+        
+        
+      ),
+      
+      fluidRow(
+        column (12,
                 DT::dataTableOutput("mytable"))
       ),
       ),
@@ -361,10 +349,11 @@ server <- function(input, output, session) {
   recreation_data <- reactive ({
     req(input$social_checkbox)
   
-    recreation_visit %>%
+    new <- recreation_visit %>%
       group_by(!!! rlang::syms(input$social_checkbox)) %>%
       summarise(Visitcount = n())
       
+    new
   })
   
   output$socialFilter <- renderUI({
@@ -372,12 +361,18 @@ server <- function(input, output, session) {
   })
   
   output$socialFilterfill <- renderUI({
-    selectInput("socialfilterfill","Choose Fill Variable for Bar Plot:", choices=colnames(recreation_data())[names(recreation_data()) !="Visitcount"])
+    selectInput("socialfilterfill","Choose Fill Variable for Bar Plot:", choices=colnames(recreation_data())[names(recreation_data())  %in% c("Visitcount") == FALSE])
+  })
+  
+  
+  output$networkstatsFilter <- renderUI({
+    req(input$month)
+    selectInput("networkstatsfilter","Choose Variable for Statsitical Plot:", choices=colnames(statstable())[names(statstable()) %in% c("label", input$network, "Participant Id", "Type") == FALSE])
   })
   
   social_data <- reactive ({
     social_interaction %>%
-      filter(Month == input$month & workday == input$workday) %>%
+      filter(MonYear == input$month & workday == input$workday) %>%
       group_by(participantIdFrom,participantIdTo) %>%
       summarise(Weight = n()) %>%
       filter (participantIdFrom != participantIdTo) %>%
@@ -388,36 +383,22 @@ server <- function(input, output, session) {
    social_graph <- reactive ({
      
      new_graph <- graph_from_data_frame (social_data(),
-                                         vertices = participant_interaction) %>%
+                                         vertices = Participant_Details) %>%
        as_tbl_graph()
      
-     if (input$network == "degree") {
-       V(new_graph)$degree <- degree(new_graph)
-       new_graph <- delete_vertices(new_graph, V(new_graph)[degree < quantile (V(new_graph)$degree,0.9)])
-       filter <- quantile (V(new_graph)$degree,0.9)
-       V(new_graph)$size <- ifelse (V(new_graph)$degree > filter, 10, 0.01)
-       V(new_graph)$color <- ifelse (V(new_graph)$degree > filter, "darkgoldenrod3", "azure3")
-       V(new_graph)$label <- ifelse (V(new_graph)$degree > filter,V(new_graph)$name,NA)
-       
+     if (input$network == "Degree Centrality") {
+       V(new_graph)$value <- degree(new_graph)
+       V(new_graph)$label <- ifelse (V(new_graph)$value > quantile (V(new_graph)$value,0.99),V(new_graph)$name,NA)
        new_graph
        
-     } else if(input$network == "eig") {
-       V(new_graph)$eig <- evcent(new_graph)$vector
-       new_graph <- delete_vertices(new_graph, V(new_graph)[eig < quantile (V(new_graph)$eig,0.9)])
-       filter <- quantile (V(new_graph)$eig,0.9)
-       V(new_graph)$size <- ifelse (V(new_graph)$eig > filter, 10, 0.01)
-       V(new_graph)$color <- ifelse (V(new_graph)$eig > filter, "darkgoldenrod3", "azure3")
-       V(new_graph)$label <- ifelse (V(new_graph)$eig > filter,V(new_graph)$name,NA)
-       
+     } else if(input$network == "Eigenvector Centrality") {
+       V(new_graph)$value <- evcent(new_graph)$vector
+       V(new_graph)$label <- ifelse (V(new_graph)$value > quantile (V(new_graph)$value,0.99),V(new_graph)$name,NA)
        new_graph
-     } else if(input$network == "pagerank") {
-       V(new_graph)$pagerank <- page_rank(new_graph)$vector
-       new_graph <- delete_vertices(new_graph, V(new_graph)[pagerank < quantile (V(new_graph)$pagerank,0.9)])
-       filter <- quantile (V(new_graph)$pagerank,0.9)
-       V(new_graph)$size <- ifelse (V(new_graph)$pagerank > filter, 10, 0.01)
-       V(new_graph)$color <- ifelse (V(new_graph)$pagerank > filter, "darkgoldenrod3", "azure3")
-       V(new_graph)$label <- ifelse (V(new_graph)$pagerank > filter,V(new_graph)$name,NA)
        
+     } else if(input$network == "PageRank Centrality") {
+       V(new_graph)$value <- page_rank(new_graph)$vector
+       V(new_graph)$label <- ifelse (V(new_graph)$value > quantile (V(new_graph)$value,0.99),V(new_graph)$name,NA)
        new_graph
      }
      
@@ -425,9 +406,46 @@ server <- function(input, output, session) {
      
    })
    
+   recreation_visit_count <- reactive ({
+     
+     statsplot1 <- recreation_visit %>%
+       filter (Dates == input$month) %>%
+       group_by(`Participant Id`) %>%
+       summarise(`Pub Visit Count` = n()) %>%
+       select (`Participant Id`, `Pub Visit Count`)
+     
+     statsplot1
+   })
+   
+  statstable <- reactive ({
+     
+     sdt <- as_tibble(social_graph(), what="vertices")
+     
+     stats_dt <- sdt %>%
+       rename ("Participant Id" = "name") %>%
+       select (-label) %>%
+       left_join(recreation_visit_count(), by = "Participant Id")
+     
+     names(stats_dt)[names(stats_dt) == 'value'] <- input$network
+     
+     stats_dt
+     
+   })
+   
+   
    newtable <- reactive ({
-     Participant_Details %>%
-       filter (as.character(`Participant ID`) %in% V(social_graph())$label)
+     
+     dt <- as_tibble(social_graph(), what="vertices")
+     
+     new_dt <- dt %>%
+       filter (name %in% V(social_graph())$label) %>%
+       rename ("Participant Id" = "name") %>%
+       select (-label) %>%
+       left_join(recreation_visit_count(), by = "Participant Id")
+     
+     names(new_dt)[names(new_dt) == 'value'] <- input$network
+     
+     new_dt
      
    })
    
@@ -555,6 +573,7 @@ server <- function(input, output, session) {
    
    
    output$socialstatsPlot <- renderPlot({
+     req(input$social_checkbox)
      
      ggbetweenstats(
        data = recreation_data(),
@@ -562,6 +581,7 @@ server <- function(input, output, session) {
        y = Visitcount,
        xlab = input$socialfilter,
        ylab = "VisitCount",
+       pairwise.comparisons = FALSE,
        ggtheme = ggplot2::theme_classic() + theme(axis.title.y= element_text(angle=0),
                                                   plot.title = element_text(size = 14, face = "bold", hjust=0.5)),
        ggplot.component = ggplot2::scale_color_manual(values = color_palettes),
@@ -573,8 +593,19 @@ server <- function(input, output, session) {
    
    output$socialPlot <- renderPlot ({
      
-     plot(social_graph(),layout=layout.fruchterman.reingold, edge.arrow.size=0.1,edge.arrow.mode = "-", vertex.label.cex = 1, vertex.label.font = 2)
      
+     new_graph1 <- delete_vertices(social_graph(), V(social_graph())[value < quantile (V(social_graph())$value,0.9)])
+     filter <- quantile (V(new_graph1)$value,0.9)
+     
+     ggraph(new_graph1, layout = "graphopt") +
+       geom_edge_link(edge_colour = "grey", edge_width = 0.05) + 
+       geom_node_point(aes(size = ifelse (V(new_graph1)$value > filter, 4, 0.001)),color = ifelse (V(new_graph1)$value > filter, "#98984d", "#b3669e")) +
+       geom_node_label(aes(label = ifelse (V(new_graph1)$value > filter, V(new_graph1)$name, NA)), repel = TRUE) +
+       theme_graph() +
+       ggtitle(paste0("Top 1% influential participant based on ",input$network)) +
+       theme(legend.position = "none", plot.title=element_text( size = 10, hjust=0.5, vjust=0.5, face='bold'))
+     
+
    })
    
    output$mytable <- DT::renderDataTable(newtable(),
@@ -582,55 +613,44 @@ server <- function(input, output, session) {
                                          rownames = FALSE)
    
    
+   output$networkstatsPlot <- renderPlot({
+     
+     
+     req(input$networkstatsfilter)
+     
+     if( is.numeric(statstable()[[input$networkstatsfilter]])  || is.integer(statstable()[[input$networkstatsfilter]])) {
+       ggscatterstats(
+         data  = statstable(),
+         x = !!rlang::sym(input$networkstatsfilter),
+         y = !!rlang::sym(input$network),
+         xlab  = input$networkstatsfilter,
+         ylab  = input$network,
+         ggtheme = ggplot2::theme_classic() + theme(axis.title.y= element_text(angle=0),
+                                                    plot.title = element_text(size = 14, face = "bold", hjust=0.5)),
+         ggplot.component = ggplot2::scale_color_manual(values = color_palettes),
+         title = paste0(input$network, " comparison with ", input$networkstatsfilter)
+       )
+       
+     } else {
+       ggbetweenstats(
+         data = statstable(),
+         x = !!rlang::sym(input$networkstatsfilter),
+         y = !!rlang::sym(input$network),
+         xlab = input$networkstatsfilter,
+         ylab = input$network,
+         pairwise.comparisons = FALSE,
+         ggtheme = ggplot2::theme_classic() + theme(axis.title.y= element_text(angle=0),
+                                                    plot.title = element_text(size = 14, face = "bold", hjust=0.5)),
+         ggplot.component = ggplot2::scale_color_manual(values = color_palettes),
+         title = paste0(input$network, " comparison with ", input$networkstatsfilter)
+       )
+       
+     }
+     
+     
+   })
    
-   
-   
-
-   # output$circularPlot <- renderPlot ({
-   #   ggplot(social_circular_barplot) +      
-   #     
-   #     # Add the stacked bar
-   #     geom_bar(aes(x=as.factor(id), y=value, fill=workday), stat="identity", alpha=0.5) +
-   #     scale_fill_tron()+
-   #     
-   #     # Add a val=100/75/50/25 lines. I do it at the beginning to make sur barplots are OVER it.
-   #     geom_segment(data=grid_data, aes(x = end, y = 0, xend = start, yend = 0), colour = "grey", alpha=1, size=0.3 , inherit.aes = FALSE ) +
-   #     geom_segment(data=grid_data, aes(x = end, y = 50000, xend = start, yend = 50000), colour = "grey", alpha=1, size=0.3 , inherit.aes = FALSE ) +
-   #     geom_segment(data=grid_data, aes(x = end, y = 100000, xend = start, yend = 100000), colour = "grey", alpha=1, size=0.3 , inherit.aes = FALSE ) +
-   #     geom_segment(data=grid_data, aes(x = end, y = 150000, xend = start, yend = 150000), colour = "grey", alpha=1, size=0.3 , inherit.aes = FALSE ) +
-   #     geom_segment(data=grid_data, aes(x = end, y = 200000, xend = start, yend = 200000), colour = "grey", alpha=1, size=0.3 , inherit.aes = FALSE ) +
-   #     
-   #     # Add text showing the value of each 100/75/50/25 lines
-   #     annotate("text", x = rep(max(social_circular_barplot$id),5), y = c(0, 50000, 100000, 150000, 200000), label = c("0", "50000", "100000", "150000", "200000") , color="grey", size=2 , angle=0, fontface="bold", hjust=0.8) +
-   #     
-   #     ylim(-200000,max(label_data$tot + 1000, na.rm=T)) +
-   #     labs(title = "Social Interaction of Participants by Month and Week", caption = "From Mar 22 - Feb 23", fill = "Workday Type") +
-   #     theme_minimal() +
-   #     theme(
-   #       legend.position="right",
-   #       axis.text = element_blank(),
-   #       axis.title.x = element_blank(),
-   #       axis.title.y = element_blank(),
-   #       panel.grid = element_blank()
-   #     ) +
-   #     coord_polar(start = 0) +
-   #     # Add labels on top of each bar
-   #     geom_text(data=label_data, aes(x=id, y=tot+1000, label=weeknum, hjust=hjust), color="black", fontface="bold",alpha=0.6, size=3, angle= label_data$angle, inherit.aes = FALSE ) +
-   #     # Add base line information
-   #     geom_segment(data=base_data, aes(x = start, y = -5, xend = end, yend = -5), colour = "black", alpha=0.8, size= 0.4 , inherit.aes = FALSE ) +
-   #     geom_text(data=base_data, aes(x = title, y = -25000, label=as.factor(month)), hjust=c(1,1,1,1,1,1,0,0,0,0,0,0), colour = "black", alpha=0.7, size=3, fontface="bold", inherit.aes = FALSE)
-   # })
-
-
-    
-    
-    
-    
-    
-    
-    
-    
-    
+  
     ### Plot for BusinessPlot
    
    output$statsPlot <- renderPlot({

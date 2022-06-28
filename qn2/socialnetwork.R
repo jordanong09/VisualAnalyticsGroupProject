@@ -10,7 +10,7 @@ for(p in packages){
 
 #finance <- read_csv("qn2/rawdata/FinancialJournal.csv")
 #Part_nodes <- readRDS("data/Participant_Details.rds")
-#Social_edge <- read_csv("rawdata/SocialNetwork.csv")
+Social_edge <- read_csv("rawdata/SocialNetwork.csv")
 check_in <- read_csv("rawdata/CheckinJournal.csv")
 apartments<- read_csv("rawdata/Apartments.csv")
 travel <- read_csv("rawdata/TravelJournal.csv")
@@ -155,7 +155,7 @@ recreation_visit <- recreation_visit %>%
   )
 
 travel_visit_monthly <- recreation_visit %>%
-  group_by(Session,Weekday,Dates) %>%
+  group_by(Weekday) %>%
   summarise(Visit = n())
 
 x <- subset(travel_visit_monthly, select=-c(Visit))
@@ -241,8 +241,13 @@ test <- business_plot %>%
 
 time_levels <- c(0:23)
 
-recreation_visit$`Time Period` <- as.ch
+recreation_visit$`Participant Id` <- as.character(recreation_visit$`Participant Id` )
+
 recreation_visit$`Time Period` <- factor(recreation_visit$`Time Period`, levels=time_levels)
+
+recreation_visit$Weekday <- factor(recreation_visit$Weekday , ordered = FALSE )
+
+
 
 saveRDS(recreation_visit, "recreation_visit.rds")
 ########################Revenue of Pubs and Restaurant ###################################################
@@ -384,7 +389,19 @@ parti <- Participant_Details %>%
   filter (Type == "Resident")
 
 final_social_edge <- Social_edge_selected %>%
-  filter (participantIdFrom %in% parti$Participant_ID)
+  filter (participantIdFrom %in% `Participant_Details(880)`$`Participant ID`) %>%
+  filter (participantIdTo %in% `Participant_Details(880)`$`Participant ID`)
+
+final_social_edge <- final_social_edge %>%
+  unite('MonYear',MonthYear:Year, sep= " ") %>%
+  select(-timestamp, -Weekday)
+
+
+final_social_edge$participantIdFrom <- as.character(final_social_edge$participantIdFrom)
+
+
+saveRDS(final_social_edge, "social_interaction_all.rds")
+  
   
 
 
@@ -392,28 +409,9 @@ final_social_edge <- Social_edge_selected %>%
 work_day <- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
 
 
-Social_edge_selected_workdays <- Social_edge %>%
-  mutate (Weekday = wday(timestamp,
-                         label = TRUE,
-                         abbr = FALSE)) %>%
-  mutate (month = month(timestamp,
-                        label = TRUE)) %>%
-  mutate (week = lubridate::week(timestamp)) %>%
-  mutate (Year = year(timestamp)) %>%
-  filter (Year == 2022 | month == "Jan" | month == "Feb") %>%
-  mutate (day = day(timestamp)) %>%
-  mutate (weeknum = case_when(
-    day <= 7 ~ 1,
-    day <= 14 ~ 2,
-    day <= 21 ~ 3,
-    day <= 28 ~ 4,
-    TRUE ~ 5
-  )) %>%
-  mutate (workday = case_when(
-    Weekday %in% work_day ~ "Working Day",
-    TRUE ~ "Non-Working Day"
-  )) %>%
-  select(participantIdFrom,month,workday,weeknum)
+Social_edge_selected_workdays <- final_social_edge %>%
+  filter (Year == 2022 | MonthYear == "Jan" | MonthYear == "Feb") %>%
+  select(participantIdFrom,month,workday)
 
 social_edge_plot <- Social_edge_selected_workdays %>%
   group_by (month) %>%
@@ -427,8 +425,8 @@ saveRDS (final_social_edge, "social_interaction.rds")
 saveRDS (Participant_Details, "participant_interaction.rds")
 
 
-Social_edge_aggregated_workday <- Social_edge_selected %>%
-  filter(Month == "Aug" & Year == 2022 & workday == "Working Day") %>%
+Social_edge_aggregated_workday <- final_social_edge %>%
+  filter(MonYear == "Mar 2022" & workday == "Working Day") %>%
   group_by(participantIdFrom,participantIdTo) %>%
   summarise(Weight = n()) %>%
   filter (participantIdFrom != participantIdTo) %>%
@@ -455,7 +453,7 @@ Part_nodes_aggregated_non_workingday <- Participant_Details %>%
 
 
 new_graph <- graph_from_data_frame (Social_edge_aggregated_workday,
-                                 vertices = participant_interaction) %>%
+                                 vertices = `Participant_Details(880)`) %>%
   as_tbl_graph()
 
 social_graph_sep_nonworking <- graph_from_data_frame (Social_edge_aggregated_nonworkday,
@@ -463,7 +461,7 @@ social_graph_sep_nonworking <- graph_from_data_frame (Social_edge_aggregated_non
   as_tbl_graph()
 
 
-V(social_graph_sep_working)$degree <- degree(social_graph_sep_working)
+V(new_graph)$value <- degree(new_graph)
 V(social_graph_sep_working)$eig <- evcent(social_graph_sep_working)$vector
 V(social_graph_sep_working)$hubs <- hub.score(social_graph_sep_working)$vector
 V(social_graph_sep_working)$authorities <- authority.score(social_graph_sep_working)$vector
@@ -479,28 +477,27 @@ V(social_graph_sep_nonworking)$closeness <- closeness(social_graph_sep_nonworkin
 V(social_graph_sep_nonworking)$betweenness <- betweenness(social_graph_sep_nonworking)
 V(social_graph_sep_nonworking)$pagerank <- page_rank(social_graph_sep_nonworking)$vector
 
-social_graph_sep_working <- delete_vertices(social_graph_sep_working, V(social_graph_sep_working)[degree < quantile (V(social_graph_sep_working)$degree,0.9)])
+new_graph <- delete_vertices(new_graph, V(new_graph)[value < quantile (V(new_graph)$value,0.9)])
 
-ggraph(social_graph_sep_working) +
-  geom_edge_link(edge_colour = "peachpuff4", edge_width = 0.05) + 
-  geom_node_point(aes(size = ifelse (V(social_graph_sep_working)$degree > high_level, 4, 0.001))) +
-  geom_node_text ( aes(label = ifelse (V(social_graph_sep_working)$degree > high_level,V(social_graph_sep_working)$name,NA), repel = TRUE )) +
-  theme_graph()
-
-
-
-
+ggraph(new_graph, layout = "nicely") +
+  geom_edge_link(edge_colour = "grey", edge_width = 0.05) + 
+  geom_node_point(aes(size = ifelse (V(new_graph)$value > high_level, 4, 0.001)),color = ifelse (V(new_graph)$value > high_level, "#98984d", "#b3669e")) +
+  geom_node_label(aes(label = ifelse (V(new_graph)$value > high_level, V(new_graph)$name, NA)), repel = TRUE) +
+  theme_graph() +
+  ggtitle("Text Network") +
+  theme(panel.background = element_rect(fill = "white"), legend.position = "none", plot.title=element_text( hjust=0.5, vjust=0.5, face='bold'))
 
 
-
+vertex_attr(new_graph)
 
 V(new_graph)$degree <- degree(new_graph)
 new_graph <- delete_vertices(new_graph, V(new_graph)[degree < quantile (V(new_graph)$degree,0.9)])
 filter <- quantile (V(new_graph)$degree,0.9)
 V(new_graph)$size <- ifelse (V(new_graph)$degree > filter, 10, 0.01)
 V(new_graph)$color <- ifelse (V(new_graph)$degree > filter, "darkgoldenrod3", "azure3")
-V(new_graph)$label <- ifelse (V(new_graph)$degree > filter,V(new_graph)$name,NA)
-
+V(new_graph)$label <- ifelse (V(new_graph)$degree > filter,V(new_graph)$name,NA) +
+  
+dataframe <- as_tibble(new_graph, what="vertices")
 
 participant_interaction <- participant_interaction %>%as.character(participant_interaction$Participant_ID)
 
@@ -512,7 +509,7 @@ plot(new_graph,layout=layout.mds, edge.arrow.size=0.1,edge.arrow.mode = "-", ver
 
 low_level
 
-high_level <- quantile (V(x)$degree,0.99)
+high_level <- quantile (V(new_graph)$value,0.9)
 high_level1 <- quantile (V(social_graph_sep_working)$eig,0.99)
 high_level2 <- quantile (V(social_graph_sep_working)$hubs,0.99)
 high_level3 <- quantile (V(social_graph_sep_working)$authorities,0.99)
@@ -536,7 +533,6 @@ plot(social_graph_jun,layout=layout.mds, edge.arrow.size=0.1,edge.arrow.mode = "
 
 saveRDS(Part_nodes_aggregated_non_workingday,"SUREWORK.rds")
 saveRDS(social_graph_workingday,"social_graph_workingday.rds")
-plot.i
 
 edge_attr(cgraph)
 
