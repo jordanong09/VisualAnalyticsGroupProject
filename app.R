@@ -515,7 +515,7 @@ server <- function(input, output, session) {
    output$barPlot <- renderPlot({
      ggplot(demo_dataset(),
             aes(x = .data[[input$demo_category]])) + 
-       geom_bar(fill= '#E15E8E') +
+       geom_bar(fill= '#F3CA6C') +
        geom_text(stat = 'count',
                  aes(label= paste0(stat(count), ', ', 
                                    round(stat(count)/sum(stat(count))*100, 
