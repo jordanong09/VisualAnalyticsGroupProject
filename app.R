@@ -12,12 +12,16 @@ library (DT)
 library(scales)
 
 
-Participant_Details <- readRDS("data/Participant_Details(880).rds")
-nonParticipant_Details <- readRDS("data/Participant_Details(131).rds")
-total_data <- read_rds('data/business_plot.rds')
+Resident_Details <- readRDS("data/Resident_Details.rds")
+nonResident_Details <- readRDS("data/NonResident_Details.rds")
+total_data <- readRDS('data/business_plot.rds')
 buildings <- read_sf("data/Buildings.csv", 
                      options = "GEOM_POSSIBLE_NAMES=location")
 
+Region <- st_read('data/buildings.shp') 
+
+demo_buildings <- readRDS ("data/demo_buildings.rds")
+demo_buildings <- st_as_sf(demo_buildings)
 
 recreation_visit <- readRDS("data/recreation_visit.rds")
 social_interaction <- readRDS("data/social_interaction_all.rds")
@@ -66,9 +70,25 @@ sidebar <- dashboardSidebar(
 body <- dashboardBody(
   tabItems(
     tabItem(tabName = "dashboard",
-           h2("Dashboard tab content")),
+           h2("Dashboard tab content"),
+           fluidRow(
+             column(5,
+                    selectInput(inputId = "demo_quantile",
+                                label = "Choose Quantile for Income and Joviality Level:",
+                                choices = c( "10%" = "0.1",
+                                             "15%" = "0.15",
+                                             "20%" = "0.2",
+                                             "25%" = "0.25",
+                                             "30%" = "0.3",
+                                             "35%" = "0.35",
+                                             "40%" = "0.4"
+                                ),
+                                selected = "0.1")
+                    )
+             
+           )),
     tabItem(tabName = "point1",
-            h2("Demographics in Ohio"),
+            h2("Demographics in City of Engagement"),
             fluidRow(
               valueBoxOutput("point1_info1"),
               valueBoxOutput("point1_info2"),
@@ -77,7 +97,7 @@ body <- dashboardBody(
             fluidRow(
               
               column(2, 
-                     h4("Demographics of Population in Ohio"),
+                     h4("Demographics of Population in City of Engagement"),
                      
                      radioButtons(
                        inputId = "Demo_Resident",
@@ -103,18 +123,19 @@ body <- dashboardBody(
             fluidRow(
               
               column(2, 
-                     h4("Demographics of Buildings in Ohio"),
+                     h4("Demographics of Buildings in City of Engagement"),
                      radioButtons(
                        inputId = "Demo_Buildings",
                        label = "Choose Building Type",
-                       choices = c("Residential",
+                       choices = c("Buildings",
+                                   "Residential",
                                    "Commercial"),
-                       selected = "Residential"
+                       selected = "Buildings"
                      ),
                      selectInput(inputId = "Demo_Buildings1",
                                  label = "Choose a Category Type for Buildings Visualisation",
                                  choices = c( "Vacancy",
-                                              "Shared Apartment"
+                                              "Building Type"
                                  ),
                                  selected = "Vacancy"),
                      br(),
@@ -133,11 +154,12 @@ body <- dashboardBody(
                      plotOutput("buildingBarPlot")),
               
               column(5,
-                     plotOutput("buildingPlot"))
+                     plotOutput("buildingPlot",   width = "120%",
+                                height = "500px"))
               )
     ),
     tabItem(tabName = "point2",
-            h2("Social Network Interaction in Ohio"),
+            h2("Social Network Interaction in City of Engagement"),
             fluidRow(
               valueBoxOutput("point2_info1"),
               valueBoxOutput("point2_info2"),
@@ -145,20 +167,7 @@ body <- dashboardBody(
             ),
             fluidRow(
               column (2,
-                      helpText(" Visualise the Social Network Interaction of the Population in Ohio"),
-                      checkboxGroupInput( inputId = "social_checkbox",
-                                          label = "Select variables to group:",
-                                          choices = c(
-                                            "Participant Id" = "Participand Id",
-                                            "Pub Id",
-                                            "Month Year" = "Dates",
-                                            "Time of Day (hours)" = "Time Period",
-                                            "Weekday type (Mon-Sun)" = "Weekday",
-                                            "Workday type (Working/Non-Working)" = "Workday Type",
-                                            "Period of Day (Morning - Midnight)" = "Session",
-                                            "Region of Pub" = "Region"
-                                          )),
-                      
+                      helpText(" Visualise the Social Network Interaction of the Population in City of Engagement"),
                       uiOutput("socialFilter"),
                       uiOutput("socialFilterfill")
                       
@@ -181,7 +190,7 @@ body <- dashboardBody(
             
             fluidRow(
               column (2,                    
-                      helpText(" Visualise the top 1% influential people in Ohio based on Month and Day"),
+                      helpText(" Visualise the top 1% influential people in City of Engagement based on Month and Day"),
                       selectInput(inputId = "month",
                                   label = "Choose a Month",
                                   choices = unique(social_interaction$MonYear),
@@ -223,7 +232,7 @@ body <- dashboardBody(
             )
     ),
     tabItem(tabName = "point3",
-            h2("Predominant Business in Ohio"),
+            h2("Predominant Business in City of Engagement"),
             fluidRow(
               valueBoxOutput("point3_info1"),
               valueBoxOutput("point3_info2"),
@@ -314,14 +323,56 @@ ui <- dashboardPage(
 ############################################################SERVER###########################################################################
 server <- function(input, output, session) {
   
+  Participant_Details <- reactive({
+    upr_income <- quantile(Resident_Details$Income,1-(as.numeric(input$demo_quantile)))
+    lwr_income <- quantile(Resident_Details$Income,as.numeric(input$demo_quantile))
+    
+    upr_joy <- quantile(Resident_Details$Joviality,1-(as.numeric(input$demo_quantile)))
+    lwr_joy <- quantile(Resident_Details$Joviality,as.numeric(input$demo_quantile))
+    
+    Resident_Details <- Resident_Details %>%
+      mutate (`Income Level` = case_when(
+        Income >= upr_income ~ "High Income",
+        Income <= lwr_income ~ "Low Income",
+        TRUE ~ "Medium Income"
+      ) 
+        ) %>% 
+      mutate (`Joviality Level` = case_when(
+        Joviality >= upr_joy ~ "Happy Participant",
+        Joviality <= lwr_joy ~ "Average Participant",
+        TRUE ~ "Dull Participant"
+      ) 
+      )
+    
+    Resident_Details
+    
+  })
+  
+  nonParticipant_Details <- reactive({
+
+    upr_joy <- quantile(nonResident_Details$Joviality,1-(as.numeric(input$demo_quantile)))
+    lwr_joy <- quantile(nonResident_Details$Joviality,as.numeric(input$demo_quantile))
+    
+    nonResident_Details <- nonResident_Details %>%
+      mutate (`Joviality Level` = case_when(
+        Joviality >= upr_joy ~ "Happy Participant",
+        Joviality <= lwr_joy ~ "Average Participant",
+        TRUE ~ "Dull Participant"
+      ) 
+      )
+    
+    nonResident_Details
+  })
+  
+  
   ##Reactive Values for Demographics Plot
   
   demo_dataset <- reactive({
     if (input$Demo_Resident == "Resident") {
-      Participant_Details <- Participant_Details[, sapply(Participant_Details, class) %in% c('character', 'factor')]
+      Participant_Details <- Participant_Details()[, sapply(Participant_Details(), class) %in% c('character', 'factor', 'logical')]
       Participant_Details
     } else {
-      nonParticipant_Details <- nonParticipant_Details[, sapply(nonParticipant_Details, class) %in% c('character', 'factor')]
+      nonParticipant_Details <- nonParticipant_Details()[, sapply(nonParticipant_Details(), class) %in% c('character', 'factor', 'logical')]
       nonParticipant_Details
     }
   })
@@ -341,10 +392,10 @@ server <- function(input, output, session) {
   
   vards1 <- reactive ({
     
-    if(input$Demo_Buildings == "Residential") {
+    if(input$Demo_Buildings == "Buildings") {
       switch(input$Demo_Buildings1,
-             "Vacancy" = unique(residential_data$Vacancy),
-             "Shared Apartment"= unique(residential_data$`Shared Apartment`)
+             "Vacancy" = unique(demo_buildings$Vacancy),
+             "Building Type"= unique(demo_buildings$`Building Type`)
       )
     }
     
@@ -357,7 +408,7 @@ server <- function(input, output, session) {
   
   buildingData <- reactive (
     {
-      residential_data_sf %>%
+      demo_buildings %>%
           filter(.data[[input$Demo_Buildings1]] == as.character(input$fil1))
     }
   )
@@ -402,7 +453,7 @@ server <- function(input, output, session) {
    social_graph <- reactive ({
      
      new_graph <- graph_from_data_frame (social_data(),
-                                         vertices = Participant_Details) %>%
+                                         vertices = Participant_Details()) %>%
        as_tbl_graph()
      
      if (input$network == "Degree Centrality") {
@@ -515,7 +566,7 @@ server <- function(input, output, session) {
    output$barPlot <- renderPlot({
      ggplot(demo_dataset(),
             aes(x = .data[[input$demo_category]])) + 
-       geom_bar(fill= '#E15E8E') +
+       geom_bar(fill= '#c7efe5') +
        geom_text(stat = 'count',
                  aes(label= paste0(stat(count), ', ', 
                                    round(stat(count)/sum(stat(count))*100, 
@@ -547,10 +598,10 @@ server <- function(input, output, session) {
    })
    
    output$buildingBarPlot <- renderPlot({
-     ggplot(residential_data,
+     ggplot(buildingData(),
             aes(x = Region, fill = .data [[input$Demo_Buildings1]])) + 
        geom_bar(position="dodge", stat="count") +
-       scale_fill_manual(values=c("#E6286E",
+       scale_fill_manual(values=c("#ed81bf",
                                   "#539CF0")) +
        geom_text(stat = 'count',
                  aes(label= paste0(stat(count), ', ', 
@@ -560,23 +611,26 @@ server <- function(input, output, session) {
             title = paste0("Distribution of Buildings by ", input$Demo_Buildings1)) +
        theme(axis.title.y= element_text(angle=0), axis.ticks.x= element_blank(),
              panel.background= element_blank(), axis.line= element_line(color= 'grey'),
-             plot.title = element_text(size = 14, face = "bold")) 
+             plot.title = element_text(size = 14, face = "bold"), legend.position="none") 
      
    })
    
    output$buildingPlot <- renderPlot ({
-     tm_shape(buildings)+
-       tm_polygons(col = "grey60",
-                   size = 1,
-                   border.col = "black",
-                   border.lwd = 1) +
-       tm_shape(buildingData()) +
-       tm_bubbles (
-         col = "Shared Apartment",
-         size = "Rental Cost",
-         border.col = "black",
-         border.lwd = 1
-       )
+     ggplot(data=Region) +
+       geom_sf(aes(fill = region),alpha=0.4) +
+       scale_fill_manual(values = c("#7aa456",
+         "#c65999",
+         "#c96d44",
+         "#777acd"), name = "Region")  +
+       geom_sf(data = buildingData(), aes(color = .data [[input$Demo_Buildings1]]), show.legend = F) +
+       theme_graph()+
+       labs(title = paste0("Distribution of ",input$Demo_Buildings, " by ", input$Demo_Buildings1),
+            subtitle = paste0(input$fil1," ", input$Demo_Buildings)) + 
+       theme(legend.position="bottom",
+             legend.key.size = unit(0.4, 'cm'),
+             legend.spacing.x = unit(0.2, 'cm'),
+             plot.title = element_text(size = 12, face = "bold"))
+     
      
    })
    

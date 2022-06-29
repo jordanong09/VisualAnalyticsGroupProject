@@ -1,6 +1,6 @@
 packages = c('igraph', 'tidygraph', 
              'ggraph','lubridate', 'clock',
-             'tidyverse', 'ggmap', 'ggstatsplot', 'ggside', 'ggdist', 'patchwork', 'hrbrthemes', 'ggplot2','zoo','d3Tree',"d3treeR","graphlayouts","RColorBrewer","ggsci")
+             'tidyverse', 'ggmap', 'ggstatsplot', "sf",'ggside', 'ggdist', 'patchwork', 'hrbrthemes', 'ggplot2','zoo','d3Tree',"d3treeR","graphlayouts","RColorBrewer","ggsci")
 for(p in packages){
   if(!require(p, character.only = T)){
     install.packages(p)
@@ -8,7 +8,7 @@ for(p in packages){
   library(p, character.only = T)
 }
 
-#finance <- read_csv("qn2/rawdata/FinancialJournal.csv")
+finance <- read_csv("rawdata/FinancialJournal.csv")
 #Part_nodes <- readRDS("data/Participant_Details.rds")
 Social_edge <- read_csv("rawdata/SocialNetwork.csv")
 check_in <- read_csv("rawdata/CheckinJournal.csv")
@@ -16,6 +16,76 @@ apartments<- read_csv("rawdata/Apartments.csv")
 travel <- read_csv("rawdata/TravelJournal.csv")
 buildings <- read_sf("data/Buildings.csv", 
                      options = "GEOM_POSSIBLE_NAMES=location")
+
+Region <- st_read('data/buildings.shp') 
+
+################ Trial Plot ###############################################
+
+class(buildings$units)
+
+"[382]" %in% buildings$units
+
+buildings_data_new <- buildings_data %>%
+  filter (Vacancy == "Vacant")
+
+Region_select <- Region %>%
+  select (bldngId, region)
+
+Region_select <- st_drop_geometry(Region_select)
+
+buildings_data <- buildings_data %>%
+  left_join(Region_select, by= c("Building ID" = "bldngId"))
+
+
+buildings_data <- buildings_data %>% rename("Region" = "region")
+
+ggplot(data=Region) +
+  geom_sf(aes(fill = region),alpha=0.2) +
+  scale_fill_manual(values = c("#58bc51",
+                               "#a55bd1",
+                               "#a1b534",
+                               "#596dd1"))  +
+  geom_sf(data = buildings_data_new, aes(color = Vacancy), show.legend = F) +
+  theme_graph()+
+  theme(legend.position="bottom",
+        legend.key.size = unit(0.3, 'cm'),
+        legend.spacing.x = unit(0.2, 'cm'))
+
+############################### Get User Id did not visit Pubs ##########################################
+
+travel <- travel %>%
+  filter (purpose == "Recreation (Social Gathering)") %>%
+  group_by(participantId) %>%
+  summarise (count = n()) %>%
+  select(-count)
+
+travel$`Visit Pub` <- "True"
+travel$participantId <- as.character(travel$participantId)
+
+`Participant_Details(880)` <- `Participant_Details(880)` %>%
+  left_join(travel,by=c("Participant ID" = "participantId"))
+  
+
+`Participant_Details(880)`$`Visit Pub`[is.na(`Participant_Details(880)`$`Visit Pub`)] <- "False"
+
+saveRDS(`Participant_Details(880)`, "Participant_Details(880).rds")
+
+
+#######################################buildings with residential and commercial geometery plot############################################
+
+buildings_long <- buildings %>% tidyr::separate_rows(units, convert = TRUE)
+
+buildings_data <- buildings %>%
+  mutate(Vacancy = case_when(
+    units == "" ~ "Vacant",
+    TRUE ~ "Occupied"
+  )) %>%
+  select(-maxOccupancy, -units) %>%
+  rename("Building Type" = "buildingType",
+         "Building ID" = "buildingId")
+
+saveRDS(buildings_data, "demo_buildings.rds")
+
 
 
 ########################Revenue of Pubs and Restaurant ###################################################
@@ -316,6 +386,9 @@ new_user <- finance_new[["participantId"]]
 finance <- finance %>%
   filter(participantId %in% new_user)
 
+
+####################################################### Getting Financial Data for Users ######################################################################
+
 financeJ <- finance %>% #load the financeJ data table
   select(c("participantId","category", "amount")) %>% #choose the columns to subset
   group_by(participantId,category)%>% 
@@ -324,19 +397,45 @@ financeJ <- finance %>% #load the financeJ data table
 financeJ[is.na(financeJ)] = 0 #input a 0 value to all N.A field in the data table
 
 financeJ_2 <- financeJ %>%
-  mutate(Expenses = Education + Food + Recreation + Shelter + RentAdjustment) %>% #create new column to sum all the different categories of expenses
-  mutate (Income = RentAdjustment + Wage) %>%
-  select(participantId, Income, Expenses)
+  mutate (Income = Wage) %>%
+  mutate (`Rent Apartment` = case_when(
+    RentAdjustment > 0 ~ "True",
+    TRUE ~ "False"
+  )) %>%
+  select(participantId, Income, `Rent Apartment`)
 
-summary (financeJ_2)
+financeJ_2_880 <- financeJ_2 %>%
+  filter(participantId %in% `Participant_Details(880)`$`Participant ID`)
+
+financeJ_2_880$Income<-round(financeJ_2_880$Income,0)
+financeJ_2_880$participantId <- as.character(financeJ_2_880$participantId)
+
+`Participant_Details(880)` <- `Participant_Details(880)` %>%
+  left_join(financeJ_2_880, by = c("Participant ID" = "participantId"))
+
+high_income <- quantile(`Participant_Details(880)`$Income,0.8)
+low_income <- quantile(`Participant_Details(880)`$Income,0.2)
+
+`Participant_Details(880)` <- `Participant_Details(880)` %>%
+  select (-`Income Level`) %>%
+  mutate (`Income Level` = case_when(
+    Income >= high_income ~ "High Income",
+    Income <= low_income ~ "High Income",
+    TRUE ~ "Medium Income"
+  ))
+
+financeJ_2_131 <- financeJ_2 %>%
+  filter(participantId %in% `Participant_Details(131)`$`Participant ID`)
+
+############################################################### Editing Participant Nodes #################################################################
 
 Part_nodes <- Part_nodes %>%
-  rename('Participant_ID' = 'participantId', 
-         'Household_Size' = 'householdSize', 
-         'Have_Kids' = 'haveKids', 
+  rename('Participant ID' = 'participantId', 
+         'Household Size' = 'householdSize', 
+         'Have Kids' = 'haveKids', 
          'Age' = 'age', 
-         'Education_Level' = 'educationLevel', 
-         'Interest_Group' = 'interestGroup', 
+         'Education Level' = 'educationLevel', 
+         'Interest Group' = 'interestGroup', 
          'Joviality' = 'joviality')
 
 #rename value 
@@ -354,6 +453,8 @@ financeJ_2 <- financeJ_2 %>%
 Part_nodes$Age_Group <- cut(Part_nodes$Age, breaks=brks, labels = grps)
 
 Part_nodes <- merge(financeJ_2,Part_nodes, by = "Participant_ID", all.x = TRUE, all.y = TRUE)
+
+####################################################### Social edge Creation ################################################################################
 
 work_day <- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
 
