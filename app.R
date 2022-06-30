@@ -166,26 +166,31 @@ body <- dashboardBody(
               valueBoxOutput("point2_info3")
             ),
             fluidRow(
-              column (2,
+              column (4,
                       helpText(" Visualise the Social Network Interaction of the Population in City of Engagement"),
                       uiOutput("socialFilter"),
-                      uiOutput("socialFilterfill")
+                      uiOutput("socialFilterfill"),
+                      selectInput("t1", label="Filter Selection of Group Variable", choices=c(), multiple = TRUE)
                       
                       
                       
               ),
               
-              column (4,
-                      plotOutput("treemapPlot")
-              ),
               
-              column (6,
+              column (8,
                       plotOutput("socialstatsPlot")
               )
               
               
             ),
             
+            hr(),
+            
+            fluidRow(
+              plotOutput("socialstatsPlotgroup")
+            ),
+            
+             
             hr(),
             
             fluidRow(
@@ -417,27 +422,51 @@ server <- function(input, output, session) {
    ##Reactive Values for Social Network Plot
   
   recreation_data <- reactive ({
-    req(input$social_checkbox)
   
-    new <- recreation_visit %>%
-      group_by(!!! rlang::syms(input$social_checkbox)) %>%
+    recreation_visit <- recreation_visit %>%
+      left_join(Participant_Details(), by = c("Participant Id" = "Participant ID"))
+    
+    recreation_visit <- recreation_visit[, sapply(recreation_visit, class) %in% c('character', 'factor', 'logical')]
+    
+    recreation_visit
+    
+  })
+  
+  
+  statsplot <- reactive ({
+    
+    req(recreation_data())
+    
+    new1 <- recreation_data() %>%
+      group_by(!! rlang::sym(input$socialfilter), !! rlang::sym(input$socialfiltergroup)) %>%
       summarise(Visitcount = n())
-      
-    new
+    
+    new1
   })
   
   output$socialFilter <- renderUI({
-    selectInput("socialfilter","Choose X Axis Variable for Bar Plot:", choices=colnames(recreation_data())[names(recreation_data()) !="Visitcount"])
+    req(recreation_data())
+    selectizeInput("socialfilter","Choose X Axis Variable for Statisitical Plot:", choices=colnames(recreation_data())[names(recreation_data()) %in% c("Visitcount", "Participant Id") == FALSE])
   })
   
   output$socialFilterfill <- renderUI({
-    selectInput("socialfilterfill","Choose Fill Variable for Bar Plot:", choices=colnames(recreation_data())[names(recreation_data())  %in% c("Visitcount") == FALSE])
+    
+    selectInput("socialfiltergroup","Choose Group Variable for Statisitical Plot:", choices=colnames(recreation_data())[names(recreation_data())  %in% c("Visitcount", "Participant Id", input$socialfilter) == FALSE])
   })
+  
+  observeEvent(input$socialfiltergroup, {
+    choiceList <- recreation_visit %>%
+      select(.data[[input$socialfiltergroup]]) %>%
+      unique()
+    
+    updateSelectInput(session, "t1",choices = choiceList)
+  })  
+  
   
   
   output$networkstatsFilter <- renderUI({
     req(input$month)
-    selectInput("networkstatsfilter","Choose Variable for Statsitical Plot:", choices=colnames(statstable())[names(statstable()) %in% c("label", input$network, "Participant Id", "Type") == FALSE])
+    selectInput("networkstatsfilter","Choose Variable for Statsitical Plot:", choices=colnames(statstable())[names(statstable()) %in% c("label", input$network, "Participant Id") == FALSE])
   })
   
   social_data <- reactive ({
@@ -656,25 +685,11 @@ server <- function(input, output, session) {
    })
       
    
-   output$treemapPlot <- renderPlot({
-     ggplot(recreation_data(), aes(x = .data[[input$socialfilter]], y = Visitcount, fill = .data[[input$socialfilterfill]])) +
-       geom_bar(stat = "identity", position = "dodge") + 
-       scale_fill_manual(values = color_palettes) +
-       theme_classic() +
-       labs(y= 'No. of\n Visits', x= input$socialfilter,
-            title = paste0("Number of Visits to Pubs by ", input$socialfilter)) +
-       theme(axis.title.y= element_text(angle=0), axis.ticks.x= element_blank(),
-             panel.background= element_blank(), axis.line= element_line(color= 'grey'),
-             plot.title = element_text(size = 14, face = "bold")) 
-       
-   })
-   
-   
    output$socialstatsPlot <- renderPlot({
-     req(input$social_checkbox)
+     req(input$socialfilter)
      
      ggbetweenstats(
-       data = recreation_data(),
+       data = statsplot(),
        x = !!rlang::sym(input$socialfilter),
        y = Visitcount,
        xlab = input$socialfilter,
@@ -685,6 +700,25 @@ server <- function(input, output, session) {
        ggplot.component = ggplot2::scale_color_manual(values = color_palettes),
        title = paste0("Visit Count of Pubs by ", input$socialfilter)
      )
+     
+   })
+   
+   output$socialstatsPlotgroup <- renderPlot({
+    req(input$t1)
+     
+          grouped_ggbetweenstats(
+                   data = dplyr::filter(statsplot(), !!rlang::sym(input$socialfiltergroup) %in% input$t1),
+                   x = !!rlang::sym(input$socialfilter),
+                   y = Visitcount,
+                   grouping.var = !!rlang::sym(input$socialfiltergroup),
+                   ylab = "VisitCount",
+                   pairwise.comparisons = FALSE,
+                   ggtheme = ggplot2::theme_classic() + theme(axis.title.y= element_text(angle=0),
+                                                              plot.title = element_text(size = 14, face = "bold", hjust=0.5)),
+                   ggplot.component = ggplot2::scale_color_manual(values = color_palettes),
+                   annotation.args  = list(title = paste0("Visit Count of Pubs by ", input$socialfilter))
+                 )
+     
      
    })
    
