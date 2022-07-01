@@ -93,14 +93,14 @@ travel_cost <- travel %>%
   mutate (expenses = abs(startingBalance - endingBalance))
 
 travel_cost <- travel_cost %>%
-  filter (travelEndLocationId %in% total_month_data$Id) %>%
+  filter (travelEndLocationId %in% Venue_Details$Id) %>%
   mutate (MonthYear = month(travelStartTime,
                             label = TRUE,
                             abbr = TRUE)) %>%
   mutate (Year = year(travelStartTime)) %>%
   mutate (Weekday = wday(travelStartTime,
                          label = TRUE,
-                         abbr = FALSE)) %>%
+                         abbr = TRUE)) %>%
   mutate (workday = case_when(
     Weekday %in% work_day ~ "Working Day",
     TRUE ~ "Non-Working Day"
@@ -111,7 +111,8 @@ travel_cost <- travel_cost %>%
 
 travel_cost_monthly <- travel_cost %>%
   group_by(Id,MonthYear,Year,workday) %>%
-  summarise(Expenses = sum(expenses), Visit = n())
+  summarise(Expenses = sum(expenses), Visit = n()) %>%
+  ungroup
 
 travel_visit_monthly <- travel_cost %>%
   group_by(Id,MonthYear,Year,workday) %>%

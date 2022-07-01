@@ -306,10 +306,68 @@ body <- dashboardBody(
               column(5,
                      plotOutput("typePlot")
               ),
-              column(5, 
-                     plotOutput("tMapEarnings", click = "plot_click"),
-                     h4("Clicked Points"),
-                     verbatimTextOutput("plot_clickedpoints"))       
+              # column(5, 
+              #        plotOutput("tMapEarnings", click = "plot_click"),
+              #        h4("Clicked Points"),
+              #        verbatimTextOutput("plot_clickedpoints"))       
+            ),
+            
+            fluidRow(
+              
+              column(2, 
+                     h4("Funnel Plot Selection"),
+                     
+                     selectInput(inputId = "filterFunnel1",
+                                 label = "Choose a Weekday Type",
+                                 choices = c( "All",
+                                              "Non-Working Day",
+                                              "Working Day"
+                                 ),
+                                 selected = "All"),
+                     br(),
+                     
+                     selectInput(inputId = "filterFunnel2",
+                                 label = "Choose a month to filter",
+                                 choices = c( "All",
+                                              "Mar 2022",
+                                              "Apr 2022",
+                                              "May 2022",
+                                              "Jun 2022",
+                                              "Jul 2022",
+                                              "Aug 2022",
+                                              "Sep 2022",
+                                              "Oct 2022"
+                                 ),
+                                 selected = "All"),
+                     
+                     br(),
+                     selectInput(inputId = "filterFunnel3",
+                                 label = "Choose 1st Confidence Interval",
+                                 choices = c( "90%" = "0.90",
+                                              "95%" = "0.95",
+                                              "99%" = "0.99",
+                                              "99.9%" = "0.999"
+                                              
+                                 ),
+                                 selected = "0.90"),
+                     br(),
+                     selectInput(inputId = "filterFunnel4",
+                                 label = "Choose 1st Confidence Interval",
+                                 choices = c( "90%" = "0.90",
+                                              "95%" = "0.95",
+                                              "99%" = "0.99",
+                                              "99.9%" = "0.999"
+                                              
+                                 ),
+                                 selected = "0.99")
+                     
+              ),
+              
+              column(7,
+                     plotOutput("funnelPlot", brush = brushOpts(id = "plot_brush")),
+                     dataTableOutput("plot_brushedpoints")
+              ),
+                  
             )
       
     )
@@ -438,7 +496,7 @@ server <- function(input, output, session) {
     req(recreation_data())
     
     new1 <- recreation_data() %>%
-      group_by(!! rlang::sym(input$socialfilter), !! rlang::sym(input$socialfiltergroup)) %>%
+      group_by(`Pub Id`, !! rlang::sym(input$socialfilter), !! rlang::sym(input$socialfiltergroup)) %>%
       summarise(Visitcount = n())
     
     new1
@@ -446,12 +504,12 @@ server <- function(input, output, session) {
   
   output$socialFilter <- renderUI({
     req(recreation_data())
-    selectizeInput("socialfilter","Choose X Axis Variable for Statisitical Plot:", choices=colnames(recreation_data())[names(recreation_data()) %in% c("Visitcount", "Participant Id") == FALSE])
+    selectizeInput("socialfilter","Choose X Axis Variable for Statisitical Plot:", choices=colnames(recreation_data())[names(recreation_data()) %in% c("Visitcount", "Participant Id", "Pub Id") == FALSE])
   })
   
   output$socialFilterfill <- renderUI({
     
-    selectInput("socialfiltergroup","Choose Group Variable for Statisitical Plot:", choices=colnames(recreation_data())[names(recreation_data())  %in% c("Visitcount", "Participant Id", input$socialfilter) == FALSE])
+    selectInput("socialfiltergroup","Choose Group Variable for Statisitical Plot:", choices=colnames(recreation_data())[names(recreation_data())  %in% c("Visitcount", "Participant Id", "Pub Id", input$socialfilter) == FALSE])
   })
   
   observeEvent(input$socialfiltergroup, {
@@ -459,7 +517,7 @@ server <- function(input, output, session) {
       select(.data[[input$socialfiltergroup]]) %>%
       unique()
     
-    updateSelectInput(session, "t1",choices = choiceList)
+    updateSelectInput(session, "t1",choices = choiceList, selected = choiceList)
   })  
   
   
@@ -568,6 +626,52 @@ server <- function(input, output, session) {
        ) %>%
        group_by(Id, Type, long, lat) %>%
        summarise (Expenses = sum(Expenses)) 
+   })
+   
+   df <- reactive ({
+     
+     if(input$filterFunnel1 == "All" & input$filterFunnel2 == "All") {
+       
+       total_data <- total_data %>%
+         group_by (Id, Type) %>%
+         summarise (Expenses = sum(Expenses), Visit = sum(Visit))
+       
+     }else if (input$filterFunnel1 != "All" & input$filterFunnel2 == "All") {
+       
+       total_data <- total_data %>%
+         filter (workday == input$filterFunnel1) %>%
+         group_by (Id, Type) %>%
+         summarise (Expenses = sum(Expenses), Visit = sum(Visit))
+       
+     }else if (input$filterFunnel1 == "All" & input$filterFunnel2 != "All") {
+       
+       total_data <- total_data %>%
+         filter (DateMonth == input$filterFunnel2) %>%
+         group_by (Id, Type) %>%
+         summarise (Expenses = sum(Expenses), Visit = sum(Visit))
+       
+     }else if (input$filterFunnel1 != "All" & input$filterFunnel2 != "All") {
+       
+       total_data <- total_data %>%
+         filter (DateMonth == input$filterFunnel2) %>%
+         filter (workday == input$filterFunnel1) %>%
+         group_by (Id, Type) %>%
+         summarise (Expenses = sum(Expenses), Visit = sum(Visit))
+       
+     }
+     
+     m <- lm(Expenses ~ Visit, data=total_data) 
+     fit95 <- predict(m, interval="conf", level=as.numeric(input$filterFunnel3))
+     fit99 <- predict(m, interval="conf", level=as.numeric(input$filterFunnel4))
+     total_data <- cbind.data.frame(total_data, 
+                            lwr95=fit95[,"lwr"],  upr95=fit95[,"upr"],     
+                            lwr99=fit99[,"lwr"],  upr99=fit99[,"upr"])
+     
+     total_data$lwr95[total_data$lwr95 < 0] <- 0
+     total_data$upr95[total_data$upr95 < 0] <- 0
+     total_data$lwr99[total_data$lwr99 < 0] <- 0
+     total_data$upr99[total_data$upr99 < 0] <- 0
+     total_data
    })
    
    #####################################################Plotting of Graph####################################################
@@ -857,14 +961,46 @@ server <- function(input, output, session) {
                                               size = 0.5), panel.background = element_rect(fill = "aliceblue"))
     })
     
-    output$plot_clickedpoints <- renderTable({
-      # For base graphics, we need to specify columns, though for ggplot2,
-      # it's usually not necessary.
-      res <- nearPoints(ggstatsplot1(), input$plot_click, addDist = TRUE)
-      if (nrow(res) == 0)
-        return()
-      res
+    output$funnelPlot <- renderPlot(
+    {
+      
+      M.lm=lm(Expenses~Visit,data=df())
+      
+      ggplot(df(), aes(Visit, Expenses)) +
+        # Add background
+        geom_ribbon(aes(ymin= df()$upr99, ymax = Inf), fill = "#e2a49a", alpha = 0.5) +
+        geom_ribbon(aes(ymin = df()$lwr99, ymax = df()$upr99), fill = "#e0ba9d", alpha = 0.5 ) +
+        geom_ribbon(aes(ymin = 0, ymax = df()$lwr99), fill = "#8fd6c9", alpha = 0.5) +
+        
+        # Overlay points and lines
+        geom_point(aes(shape = Type, color = Type), size = 2) + 
+        scale_color_manual(values=c('#E69F00', '#56B4E9')) +
+        geom_smooth(method="lm", colour="black", lwd=1.1, se=FALSE) + 
+        geom_line(aes(y = upr95), color="black", linetype=2) + 
+        geom_line(aes(y = lwr95), color="black", linetype=2) +
+        geom_line(aes(y = upr99), color="red", linetype=3) + 
+        geom_line(aes(y = lwr99), color="red", linetype=3) +
+        theme_classic() +
+        labs(y= 'Revenue of\nVenue', x= "No. of Visit",
+             title = paste0("Does Visit affect Revenues?"), caption = paste0("Rsquared: ", round(summary(M.lm)$r.squared,3), "\nAdjusted Rsquared: ", round(summary(M.lm)$adj.r.squared,3))) +
+        scale_y_continuous (labels = comma,limits = c(0, NA)) +
+        theme(axis.title.y= element_text(angle=0), axis.ticks.x= element_blank(),
+              panel.background= element_blank(), axis.line= element_line(color= 'grey'),
+              plot.title = element_text(size = 14, face = "bold")) 
+        
     })
+    
+    diam <- reactive({
+      
+      user_brush <- input$plot_brush
+      mysel <- brushedPoints(df(), user_brush)
+      mysel <- mysel %>%
+        select(-lwr95, -upr95, -lwr99, - upr99, -geometry)
+      return(mysel)
+      
+    })
+    
+    output$plot_brushedpoints <- DT::renderDataTable(DT::datatable(diam()))
 }
 
 # Run the application 

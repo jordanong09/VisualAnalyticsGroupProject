@@ -1,0 +1,14 @@
+name: VisualAnalyticsGroupProject
+title: VisualAnalyticsGroupProject
+username:
+account: jordan-visual-analytics-project
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 6567648
+bundleId: 6053868
+url: https://jordan-visual-analytics-project.shinyapps.io/VisualAnalyticsGroupProject/
+when: 1656495759.74469
+lastSyncTime: 1656495759.7447
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: point 1|point 3|rawdata|trial
