@@ -12,13 +12,14 @@ library (DT)
 library(scales)
 
 
-Participant_Details <- readRDS("data/Participant_Details(880).rds")
-nonParticipant_Details <- readRDS("data/Participant_Details(131).rds")
+Participant_Details <- readRDS("data/archive/Participant_Details(880).rds")
+nonParticipant_Details <- readRDS("data/archive/Participant_Details(131).rds")
 total_data <- read_rds('data/business_plot.rds')
 buildings <- read_sf("data/Buildings.csv", 
                      options = "GEOM_POSSIBLE_NAMES=location")
 
 
+buildings_details <- readRDS("data/Building_Details.rds")
 recreation_visit <- readRDS("data/recreation_visit.rds")
 social_interaction <- readRDS("data/social_interaction_all.rds")
 residential_data <- readRDS("data/Residential_Details.rds")
@@ -564,21 +565,25 @@ server <- function(input, output, session) {
      
    })
    
-   output$buildingPlot <- renderPlot ({
-     tm_shape(buildings)+
-       tm_polygons(col = "grey60",
-                   size = 1,
-                   border.col = "black",
-                   border.lwd = 1) +
-       tm_shape(buildingData()) +
-       tm_bubbles (
-         col = "Shared Apartment",
-         size = "Rental Cost",
-         border.col = "black",
-         border.lwd = 1
-       )
+   output$buildingPlot <- renderPlot({
      
+     buildings_details <- buildings_details %>%
+       filter(time == "Mar 22") 
+     
+     buildings_details$long <- sapply(buildings_details$geom_points, "[", 1)
+     buildings_details$lat <- sapply(buildings_details$geom_points, "[", 2)
+     
+     ggplot(data = buildings) +
+       geom_sf() +
+       geom_point(data = buildings_details, aes(x = long, y = lat, size = count)) +
+       scale_size_continuous(breaks = c(2, 4, 6, 8, 10)) +
+       theme_graph() + 
+       labs(size = 'count') +
+       ggtitle(paste0(input$time," @@ ")) +
+       theme(panel.grid.major = element_line(color = gray(0.5), linetype = "dashed", 
+                                             size = 0.5), panel.background = element_rect(fill = "aliceblue"))
    })
+   
    
 
    ##Plot for Social Network Tabs
