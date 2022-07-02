@@ -72,7 +72,18 @@ sidebar <- dashboardSidebar(
     menuItem("Business", tabName = "point3", icon = icon("usd", lib = "glyphicon"), startExpanded = TRUE,
              menuSubItem("Revenue by Month", tabName = "point3-1"),
              menuSubItem(HTML("Revenue of Venues by<br/>&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbspWorkday"), tabName = "point3-2"),
-             menuSubItem("Funnel Plot", tabName = "point3-3"))
+             menuSubItem("Funnel Plot", tabName = "point3-3")),
+    selectInput(inputId = "demo_quantile",
+                label = "Choose Quantile for Income and Joviality Level:",
+                choices = c( "10%" = "0.1",
+                             "15%" = "0.15",
+                             "20%" = "0.2",
+                             "25%" = "0.25",
+                             "30%" = "0.3",
+                             "35%" = "0.35",
+                             "40%" = "0.4"
+                ),
+                selected = "0.2")
   )
 )
 
@@ -81,22 +92,7 @@ body <- dashboardBody(
   tabItems(
     tabItem(tabName = "dashboard",
            h2("Dashboard tab content"),
-           fluidRow(
-             column(5,
-                    selectInput(inputId = "demo_quantile",
-                                label = "Choose Quantile for Income and Joviality Level:",
-                                choices = c( "10%" = "0.1",
-                                             "15%" = "0.15",
-                                             "20%" = "0.2",
-                                             "25%" = "0.25",
-                                             "30%" = "0.3",
-                                             "35%" = "0.35",
-                                             "40%" = "0.4"
-                                ),
-                                selected = "0.1")
-                    )
-             
-           )),
+           ),
     tabItem(tabName = "point1-1",
             fluidRow(
               valueBoxOutput(width = 6, "point1_info1"),
@@ -412,7 +408,7 @@ body <- dashboardBody(
               column(width = 6,
                      box(width = NULL, color = "teal", plotOutput("typePlot"))),
               column(width = 6,
-                     box(width = NULL, color = "teal", plotOutput("tMapEarnings")))
+                     box(width = NULL, color = "teal", tmapOutput("tMapEarnings")))
             )
     ),
     tabItem(tabName = "point3-3",
@@ -663,7 +659,7 @@ server <- function(input, output, session) {
     
     
     new1 <-  recreation_visit_social1() %>%
-      group_by(`Pub Id`, !! rlang::sym(input$socialfilter), !! rlang::sym(input$socialfiltergroup)) %>%
+      group_by(Pub_Id, !! rlang::sym(input$socialfilter), !! rlang::sym(input$socialfiltergroup)) %>%
       summarise(Visitcount = n())
     
     new1
@@ -671,12 +667,12 @@ server <- function(input, output, session) {
   
   output$socialFilter <- renderUI({
     req(recreation_visit_social1())
-    selectizeInput("socialfilter","Choose X Axis Variable for Statisitical Plot:", choices=colnames(recreation_visit_social1())[names(recreation_visit_social1()) %in% c("Visitcount", "Participant Id", "Pub Id") == FALSE])
+    selectizeInput("socialfilter","Choose X Axis Variable for Statisitical Plot:", choices=colnames(recreation_visit_social1())[names(recreation_visit_social1()) %in% c("Visitcount", "Participant_Id", "Pub_Id") == FALSE])
   })
   
   output$socialFilterfill <- renderUI({
     req(recreation_visit_social1())
-    selectInput("socialfiltergroup","Choose Group Variable for Statisitical Plot:", choices=colnames(recreation_visit_social1())[names(recreation_visit_social1())  %in% c("Visitcount", "Participant Id", "Pub Id", input$socialfilter) == FALSE])
+    selectInput("socialfiltergroup","Choose Group Variable for Statisitical Plot:", choices=colnames(recreation_visit_social1())[names(recreation_visit_social1())  %in% c("Visitcount", "Participant_Id", "Pub_Id", input$socialfilter) == FALSE])
   })
   
   observeEvent(input$socialfiltergroup, {
@@ -792,7 +788,7 @@ server <- function(input, output, session) {
          }
        ) %>%
        group_by(Id, Type) %>%
-       summarise (Expenses = mean(Expenses)) 
+       summarise (Expenses = round(mean(Expenses),2)) 
    })
    
    df <- reactive ({
@@ -801,21 +797,21 @@ server <- function(input, output, session) {
        
        total_data <- total_data %>%
          group_by (Id, Type) %>%
-         summarise (Expenses = mean(Expenses), Visit = mean(Visit))
+         summarise (Expenses = round(mean(Expenses),2), Visit = round(mean(Visit),0))
        
      }else if (input$filterFunnel1 != "All" & input$filterFunnel2 == "All") {
        
        total_data <- total_data %>%
          filter (workday == input$filterFunnel1) %>%
          group_by (Id, Type) %>%
-         summarise (Expenses = mean(Expenses), Visit = mean(Visit))
+         summarise (Expenses = round(mean(Expenses),2), Visit = round(mean(Visit),0))
        
      }else if (input$filterFunnel1 == "All" & input$filterFunnel2 != "All") {
        
        total_data <- total_data %>%
          filter (DateMonth == input$filterFunnel2) %>%
          group_by (Id, Type) %>%
-         summarise (Expenses = mean(Expenses), Visit = mean(Visit))
+         summarise (Expenses = round(mean(Expenses),2), Visit = round(mean(Visit),0))
        
      }else if (input$filterFunnel1 != "All" & input$filterFunnel2 != "All") {
        
@@ -823,7 +819,7 @@ server <- function(input, output, session) {
          filter (DateMonth == input$filterFunnel2) %>%
          filter (workday == input$filterFunnel1) %>%
          group_by (Id, Type) %>%
-         summarise (Expenses = mean(Expenses), Visit = mean(Visit))
+         summarise (Expenses = round(mean(Expenses),2), Visit = round(mean(Visit),0))
        
      }
      
@@ -944,10 +940,10 @@ server <- function(input, output, session) {
    output$buildingPlot <- renderPlot ({
      
      ggplot () +
-       geom_point(data = building_plot(), aes(x = long, y = lat)) +
+       geom_point(data = building_plot(), aes(x = long, y = lat, size = count)) +
        geom_sf(data = Region, aes(fill = region)) +
        geom_point(data = building_plot(), aes(x = long, y = lat, size = count), color = "black", pch=21, fill = "2B54F0") +
-       scale_size_continuous(breaks = c(1, 3, 5, 7, 10)) +
+       # scale_size_continuous(breaks = c(1, 3, 5, 7, 10)) +
        theme_graph() + 
        labs(size = 'count') +
        theme(panel.grid.major = element_line(color = gray(0.5), linetype = "dashed", 
@@ -958,7 +954,7 @@ server <- function(input, output, session) {
    diam1 <- reactive({
      
      user_brush1 <- input$plot_click
-     mysel <- nearPoints(buildings_details, user_brush1)
+     mysel <- nearPoints(building_plot(), user_brush1, maxpoints = 1)
      mysel_long <- mysel %>% tidyr::separate_rows(residents, convert = TRUE)
      unique1 <- unique(mysel_long$residents)
      p_details <- Participant_Details() %>%
