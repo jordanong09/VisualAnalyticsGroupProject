@@ -923,19 +923,14 @@ server <- function(input, output, session) {
    })
    
    output$socialstatsPlotgroup <- renderPlot({
-    req(input$t1)
      
           grouped_ggbetweenstats(
-                   data = dplyr::filter(statsplot(), !!rlang::sym(input$socialfiltergroup) %in% input$t1),
+                   data = statsplot(),
                    x = !!rlang::sym(input$socialfilter),
                    y = Visitcount,
                    grouping.var = !!rlang::sym(input$socialfiltergroup),
                    ylab = "VisitCount",
-                   pairwise.comparisons = FALSE,
-                   ggtheme = ggplot2::theme_classic() + theme(axis.title.y= element_text(angle=0),
-                                                              plot.title = element_text(size = 14, face = "bold", hjust=0.5)),
-                   ggplot.component = ggplot2::scale_color_manual(values = color_palettes),
-                   annotation.args  = list(title = paste0("Visit Count of Pubs by ", input$socialfilter))
+                   pairwise.comparisons = FALSE
                  )
      
      
