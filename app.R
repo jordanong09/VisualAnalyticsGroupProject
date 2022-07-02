@@ -26,6 +26,7 @@ demo_buildings <- st_as_sf(demo_buildings)
 buildings_details <- readRDS("data/Building_Details.rds")
 
 recreation_visit <- readRDS("data/recreation_visit.rds")
+recreation_visit_social <- readRDS("data/recreation_visit_social.rds")
 social_interaction <- readRDS("data/social_interaction_all.rds")
 residential_data <- readRDS("data/Residential_Details.rds")
 residential_data_sf <- st_as_sf(residential_data)
@@ -130,25 +131,37 @@ body <- dashboardBody(
                        inputId = "Demo_Buildings",
                        label = "Choose Building Type",
                        choices = c("Buildings",
-                                   "Residential",
-                                   "Commercial"),
+                                   "Residential"),
                        selected = "Buildings"
                      ),
-                     selectInput(inputId = "Demo_Buildings1",
-                                 label = "Choose a Category Type for Buildings Visualisation",
-                                 choices = c( "Vacancy",
-                                              "Building Type"
-                                 ),
-                                 selected = "Vacancy"),
+                     
+                     uiOutput("Demo_Buildings1"),
+                     
                      br(),
                      
                      uiOutput("filter1"),
                      
                      br (),
                      
-                     sliderInput("RentCost", "Rental Cost:",
-                                 min = 1, max = 10, value = 100
+                     sliderInput("count", "Residence Count:",
+                                 min = 1, max = 10, value = c(1,10)
                      ),
+                     
+                     br(),
+                     
+                     selectInput(inputId = "time",
+                                 label = "Choose a Month for visualisation: ",
+                                 choices = c("Mar 22",
+                                             "Apr 22",
+                                             "May 22",
+                                             "Jun 22",
+                                             "Jul 22",
+                                             "Aug 22",
+                                             "Sep 22",
+                                             "Oct 22",
+                                             "Nov 22",
+                                             "Dec 22"),
+                                 selected = "Mar 22"),
                      
               ),
               
@@ -156,7 +169,7 @@ body <- dashboardBody(
                      plotOutput("buildingBarPlot")),
               
               column(5,
-                     plotOutput("buildingPlot", brush = brushOpts(id = "plot_brush1")),
+                     plotOutput("buildingPlot", click=clickOpts(id="plot_click")),
                      dataTableOutput("plot_brushedpoints1"))
               )
     ),
@@ -253,7 +266,38 @@ body <- dashboardBody(
                                  label = "Choose Venue Type for Statistical Plot",
                                  choices = c( "Restaurant",
                                               "Pubs"),
-                                 selected = "Restaurant")),
+                                 selected = "Restaurant"),
+                     br(),
+                     
+                     selectInput(inputId = "plotType1",
+                                 label = "Choose Plot Type for Statistical Plot",
+                                 choices = c( "Box & Violin Plot" = "boxviolin",
+                                              "Box Plot" = "box",
+                                              "Violin Plot" = "violin"
+                                 ),
+                                 selected = "boxviolin"),
+                     
+                     br(),
+                     selectInput(inputId = "testType1",
+                                 label = "Choose the type of Statistical Test",
+                                 choices = c( "Parametric" = "p",
+                                              "Non-Parametric" = "np",
+                                              "Robust" = "r",
+                                              "Bayes Factor" = "bf"
+                                 ),
+                                 selected = "p"),
+                     br(),
+                     selectInput(inputId = "pvalueType1",
+                                 label = "Choose the P Value Type for Test",
+                                 choices = c( "Holm" = "holm",
+                                              "Hochberg" = "hochberg",
+                                              "Hommel" = "hommel",
+                                              "Bonferroni" = "bonferroni",
+                                              "Benjamini & Hochberg" = "BH",
+                                              "Benjamini & Yekutieli" = "BY",
+                                              "None" = "none"
+                                 ),
+                                 selected = "holm")),
               column(10,
                      plotOutput("statsPlot"))
             ),
@@ -471,10 +515,37 @@ server <- function(input, output, session) {
              "Vacancy" = unique(demo_buildings$Vacancy),
              "Building Type"= unique(demo_buildings$`Building Type`)
       )
+    }else if (input$Demo_Buildings == "Residential") {
+      switch(input$Demo_Buildings1,
+             "Vacancy" = unique(residential_data$Vacancy),
+             "Shared Apartment"= unique(residential_data$`Shared Apartment`)
+      )
     }
     
     
   })
+  
+  output$Demo_Buildings1 <- renderUI({
+    
+    if(input$Demo_Buildings == "Buildings") {
+      bchoices = c( "Vacancy",
+                   "Building Type"
+      )
+    } 
+    
+    if(input$Demo_Buildings == "Residential") {
+      bchoices = c( "Vacancy",
+                    "Shared Apartment"
+      )
+    } 
+    
+    
+    selectInput(inputId = "Demo_Buildings1",
+               label = "Choose a Category Type for Buildings Visualisation",
+               choices = bchoices,
+               selected = "Vacancy")
+    
+  })                     
   
   output$filter1 <- renderUI({
     radioButtons("fil1","Filter", choices=vards1())
@@ -482,8 +553,13 @@ server <- function(input, output, session) {
   
   buildingData <- reactive (
     {
+      if(input$Demo_Buildings == "Buildings") {
       demo_buildings %>%
           filter(.data[[input$Demo_Buildings1]] == as.character(input$fil1))
+      } else if (input$Demo_Buildings == "Residential") {
+        residential_data %>%
+          filter(.data[[input$Demo_Buildings1]] == as.character(input$fil1))
+      }
     }
   )
   
@@ -495,18 +571,23 @@ server <- function(input, output, session) {
     recreation_visit <- recreation_visit %>%
       left_join(Participant_Details(), by = c("Participant Id" = "Participant ID"))
     
-    recreation_visit <- recreation_visit[, sapply(recreation_visit, class) %in% c('character', 'factor', 'logical')]
     
     recreation_visit
+    
+  })
+  
+  recreation_visit_social1 <- reactive ({
+    
+    recreation_visit_social <- recreation_visit_social[, sapply(recreation_visit_social, class) %in% c('character', 'factor', 'logical')]
+    recreation_visit_social
     
   })
   
   
   statsplot <- eventReactive (input$plot,{
     
-    req(recreation_data())
     
-    new1 <- recreation_data() %>%
+    new1 <-  recreation_visit_social1() %>%
       group_by(`Pub Id`, !! rlang::sym(input$socialfilter), !! rlang::sym(input$socialfiltergroup)) %>%
       summarise(Visitcount = n())
     
@@ -514,17 +595,17 @@ server <- function(input, output, session) {
   })
   
   output$socialFilter <- renderUI({
-    req(recreation_data())
-    selectizeInput("socialfilter","Choose X Axis Variable for Statisitical Plot:", choices=colnames(recreation_data())[names(recreation_data()) %in% c("Visitcount", "Participant Id", "Pub Id") == FALSE])
+    req(recreation_visit_social1())
+    selectizeInput("socialfilter","Choose X Axis Variable for Statisitical Plot:", choices=colnames(recreation_visit_social1())[names(recreation_visit_social1()) %in% c("Visitcount", "Participant Id", "Pub Id") == FALSE])
   })
   
   output$socialFilterfill <- renderUI({
-    req(recreation_data())
-    selectInput("socialfiltergroup","Choose Group Variable for Statisitical Plot:", choices=colnames(recreation_data())[names(recreation_data())  %in% c("Visitcount", "Participant Id", "Pub Id", input$socialfilter) == FALSE])
+    req(recreation_visit_social1())
+    selectInput("socialfiltergroup","Choose Group Variable for Statisitical Plot:", choices=colnames(recreation_visit_social1())[names(recreation_visit_social1())  %in% c("Visitcount", "Participant Id", "Pub Id", input$socialfilter) == FALSE])
   })
   
   observeEvent(input$socialfiltergroup, {
-    choiceList <- recreation_visit %>%
+    choiceList <- recreation_visit_social1() %>%
       select(.data[[input$socialfiltergroup]]) %>%
       unique()
     
@@ -765,25 +846,21 @@ server <- function(input, output, session) {
      
    })
    
-   output$buildingPlot <- renderPlot ({
+   building_plot <- reactive ({
      
      buildings_details <- buildings_details %>%
-       filter(time == "Mar 22") 
+       filter (time == input$time) %>%
+       filter (count >= as.numeric(input$count[1]) & count <= as.numeric(input$count[2]))
+     buildings_details
+   })
+   
+   output$buildingPlot <- renderPlot ({
      
-     
-     # ggplot(data = buildings) +
-     #   geom_sf() +
-     #   geom_point(data = buildings_details, aes(x = long, y = lat, size = count)) +
-     #   scale_size_continuous(breaks = c(2, 4, 6, 8, 10)) +
-     #   theme_graph() + 
-     #   labs(size = 'count') +
-     #   ggtitle(paste0(input$time," @@ ")) +
-     #   theme(panel.grid.major = element_line(color = gray(0.5), linetype = "dashed", 
-     #                                         size = 0.5), panel.background = element_rect(fill = "aliceblue"))
-     
-     ggplot (data = buildings_details, aes(x = long, y = lat, size = count)) + 
-       geom_point() +
-       scale_size_continuous(breaks = c(2, 4, 6, 8, 10)) +
+     ggplot () +
+       geom_point(data = building_plot(), aes(x = long, y = lat)) +
+       geom_sf(data = Region, aes(fill = region)) +
+       geom_point(data = building_plot(), aes(x = long, y = lat, size = count), color = "black", pch=21, fill = "2B54F0") +
+       scale_size_continuous(breaks = c(1, 3, 5, 7, 10)) +
        theme_graph() + 
        labs(size = 'count') +
        theme(panel.grid.major = element_line(color = gray(0.5), linetype = "dashed", 
@@ -793,9 +870,13 @@ server <- function(input, output, session) {
    
    diam1 <- reactive({
      
-     user_brush1 <- input$plot_brush1
-     mysel <- brushedPoints(buildings_details, user_brush1)
-     return(mysel)
+     user_brush1 <- input$plot_click
+     mysel <- nearPoints(buildings_details, user_brush1)
+     mysel_long <- mysel %>% tidyr::separate_rows(residents, convert = TRUE)
+     unique1 <- unique(mysel_long$residents)
+     p_details <- Participant_Details() %>%
+       filter (`Participant ID` %in% unique1)
+     return(p_details)
      
    })
    
@@ -947,11 +1028,11 @@ server <- function(input, output, session) {
        data = ggstatsplot(),
        x = DateMonth,
        y = Expenses,
-       type = input$testType,
+       type = input$testType1,
        xlab = "Mon/Year",
        ylab = "Revenue",
-       p.adjust.method = input$pvalueType,
-       plot.type = input$plotType,
+       p.adjust.method = input$pvalueType1,
+       plot.type = input$plotType1,
        ggtheme = ggplot2::theme_classic() + theme(axis.title.y= element_text(angle=0),
                                                plot.title = element_text(size = 14, face = "bold", hjust=0.5)),
        ggplot.component = ggplot2::scale_color_manual(values = color_palettes),
