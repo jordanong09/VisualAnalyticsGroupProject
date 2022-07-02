@@ -17,11 +17,13 @@ nonResident_Details <- readRDS("data/NonResident_Details.rds")
 total_data <- readRDS('data/business_plot.rds')
 buildings <- read_sf("data/Buildings.csv", 
                      options = "GEOM_POSSIBLE_NAMES=location")
-
+total_data <- st_as_sf (total_data)
 Region <- st_read('data/buildings.shp') 
 
 demo_buildings <- readRDS ("data/demo_buildings.rds")
 demo_buildings <- st_as_sf(demo_buildings)
+
+buildings_details <- readRDS("data/Building_Details.rds")
 
 recreation_visit <- readRDS("data/recreation_visit.rds")
 social_interaction <- readRDS("data/social_interaction_all.rds")
@@ -145,7 +147,7 @@ body <- dashboardBody(
                      br (),
                      
                      sliderInput("RentCost", "Rental Cost:",
-                                 min = 0, max = 2000, value = 100
+                                 min = 1, max = 10, value = 100
                      ),
                      
               ),
@@ -154,8 +156,8 @@ body <- dashboardBody(
                      plotOutput("buildingBarPlot")),
               
               column(5,
-                     plotOutput("buildingPlot",   width = "120%",
-                                height = "500px"))
+                     plotOutput("buildingPlot", brush = brushOpts(id = "plot_brush1")),
+                     dataTableOutput("plot_brushedpoints1"))
               )
     ),
     tabItem(tabName = "point2",
@@ -170,7 +172,8 @@ body <- dashboardBody(
                       helpText(" Visualise the Social Network Interaction of the Population in City of Engagement"),
                       uiOutput("socialFilter"),
                       uiOutput("socialFilterfill"),
-                      selectInput("t1", label="Filter Selection of Group Variable", choices=c(), multiple = TRUE)
+                      selectInput("t1", label="Filter Selection of Group Variable", choices=c(), multiple = TRUE),
+                      actionButton("plot", "Plot Graph")
                       
                       
                       
@@ -306,10 +309,8 @@ body <- dashboardBody(
               column(5,
                      plotOutput("typePlot")
               ),
-              # column(5, 
-              #        plotOutput("tMapEarnings", click = "plot_click"),
-              #        h4("Clicked Points"),
-              #        verbatimTextOutput("plot_clickedpoints"))       
+              column(5,
+                     tmapOutput("tMapEarnings"))
             ),
             
             fluidRow(
@@ -336,7 +337,17 @@ body <- dashboardBody(
                                               "Jul 2022",
                                               "Aug 2022",
                                               "Sep 2022",
-                                              "Oct 2022"
+                                              "Oct 2022",
+                                              "Nov 2022",
+                                              "Dec 2022"
+                                 ),
+                                 selected = "All"),
+                     br(),
+                     selectInput(inputId = "filterFunnel5",
+                                 label = "Choose a Venue Type: ",
+                                 choices = c( "All",
+                                              "Pubs",
+                                              "Restaurant"
                                  ),
                                  selected = "All"),
                      
@@ -491,7 +502,7 @@ server <- function(input, output, session) {
   })
   
   
-  statsplot <- reactive ({
+  statsplot <- eventReactive (input$plot,{
     
     req(recreation_data())
     
@@ -508,7 +519,7 @@ server <- function(input, output, session) {
   })
   
   output$socialFilterfill <- renderUI({
-    
+    req(recreation_data())
     selectInput("socialfiltergroup","Choose Group Variable for Statisitical Plot:", choices=colnames(recreation_data())[names(recreation_data())  %in% c("Visitcount", "Participant Id", "Pub Id", input$socialfilter) == FALSE])
   })
   
@@ -624,8 +635,8 @@ server <- function(input, output, session) {
            workday == input$Weekday
          }
        ) %>%
-       group_by(Id, Type, long, lat) %>%
-       summarise (Expenses = sum(Expenses)) 
+       group_by(Id, Type) %>%
+       summarise (Expenses = mean(Expenses)) 
    })
    
    df <- reactive ({
@@ -634,21 +645,21 @@ server <- function(input, output, session) {
        
        total_data <- total_data %>%
          group_by (Id, Type) %>%
-         summarise (Expenses = sum(Expenses), Visit = sum(Visit))
+         summarise (Expenses = mean(Expenses), Visit = mean(Visit))
        
      }else if (input$filterFunnel1 != "All" & input$filterFunnel2 == "All") {
        
        total_data <- total_data %>%
          filter (workday == input$filterFunnel1) %>%
          group_by (Id, Type) %>%
-         summarise (Expenses = sum(Expenses), Visit = sum(Visit))
+         summarise (Expenses = mean(Expenses), Visit = mean(Visit))
        
      }else if (input$filterFunnel1 == "All" & input$filterFunnel2 != "All") {
        
        total_data <- total_data %>%
          filter (DateMonth == input$filterFunnel2) %>%
          group_by (Id, Type) %>%
-         summarise (Expenses = sum(Expenses), Visit = sum(Visit))
+         summarise (Expenses = mean(Expenses), Visit = mean(Visit))
        
      }else if (input$filterFunnel1 != "All" & input$filterFunnel2 != "All") {
        
@@ -656,8 +667,14 @@ server <- function(input, output, session) {
          filter (DateMonth == input$filterFunnel2) %>%
          filter (workday == input$filterFunnel1) %>%
          group_by (Id, Type) %>%
-         summarise (Expenses = sum(Expenses), Visit = sum(Visit))
+         summarise (Expenses = mean(Expenses), Visit = mean(Visit))
        
+     }
+     
+     if (input$filterFunnel5 != "All") {
+       
+       total_data <- total_data %>%
+         filter (Type == input$filterFunnel5)
      }
      
      m <- lm(Expenses ~ Visit, data=total_data) 
@@ -749,23 +766,40 @@ server <- function(input, output, session) {
    })
    
    output$buildingPlot <- renderPlot ({
-     ggplot(data=Region) +
-       geom_sf(aes(fill = region),alpha=0.4) +
-       scale_fill_manual(values = c("#7aa456",
-         "#c65999",
-         "#c96d44",
-         "#777acd"), name = "Region")  +
-       geom_sf(data = buildingData(), aes(color = .data [[input$Demo_Buildings1]]), show.legend = F) +
-       theme_graph()+
-       labs(title = paste0("Distribution of ",input$Demo_Buildings, " by ", input$Demo_Buildings1),
-            subtitle = paste0(input$fil1," ", input$Demo_Buildings)) + 
-       theme(legend.position="bottom",
-             legend.key.size = unit(0.4, 'cm'),
-             legend.spacing.x = unit(0.2, 'cm'),
-             plot.title = element_text(size = 12, face = "bold"))
      
+     buildings_details <- buildings_details %>%
+       filter(time == "Mar 22") 
+     
+     
+     # ggplot(data = buildings) +
+     #   geom_sf() +
+     #   geom_point(data = buildings_details, aes(x = long, y = lat, size = count)) +
+     #   scale_size_continuous(breaks = c(2, 4, 6, 8, 10)) +
+     #   theme_graph() + 
+     #   labs(size = 'count') +
+     #   ggtitle(paste0(input$time," @@ ")) +
+     #   theme(panel.grid.major = element_line(color = gray(0.5), linetype = "dashed", 
+     #                                         size = 0.5), panel.background = element_rect(fill = "aliceblue"))
+     
+     ggplot (data = buildings_details, aes(x = long, y = lat, size = count)) + 
+       geom_point() +
+       scale_size_continuous(breaks = c(2, 4, 6, 8, 10)) +
+       theme_graph() + 
+       labs(size = 'count') +
+       theme(panel.grid.major = element_line(color = gray(0.5), linetype = "dashed", 
+                                             size = 0.5), panel.background = element_rect(fill = "aliceblue"))
      
    })
+   
+   diam1 <- reactive({
+     
+     user_brush1 <- input$plot_brush1
+     mysel <- brushedPoints(buildings_details, user_brush1)
+     return(mysel)
+     
+   })
+   
+   output$plot_brushedpoints1 <- DT::renderDataTable(DT::datatable(diam1()))
    
 
    ##Plot for Social Network Tabs
@@ -947,19 +981,24 @@ server <- function(input, output, session) {
       
     })
     
-    output$tMapEarnings <- renderPlot({
+    output$tMapEarnings <- renderTmap({
       
-      ggplot (data = buildings) +
-        geom_sf() +
-        geom_point(data = ggstatsplot1(), aes(x = long, y = lat, shape = Type, color = Expenses, size = 1)) +
-        scale_color_continuous(breaks = c(200000, 400000, 600000, 800000), label=comma) +
-        theme_graph() + 
-        labs(color = "Revenue", shape = 'Venue Type') +
-        guides(size = "none") +
-        ggtitle(paste0(input$Weekday," Revenue of Pubs and Restaurants "), subtitle = "(20 Restaurants and 12 Pubs)") +
-        theme(panel.grid.major = element_line(color = gray(0.5), linetype = "dashed", 
-                                              size = 0.5), panel.background = element_rect(fill = "aliceblue"))
+      tm_shape(Region)+
+        tm_polygons(col = "region",
+                    size = 1,
+                    title = "Region",
+                    border.col = "black",
+                    border.lwd = 1) +
+        tm_shape(ggstatsplot1()) +
+        tm_symbols(size = 0.5, col = "Expenses", style = "cont", title.col = "Average Revenue",
+                   shape = "Type", shapes.labels = c("Pub", "Restaurant"), title.shape = "Venue Type"
+        ) +
+        tm_layout(main.title= 'Averge Expenses of Venues', 
+                  main.title.position = c('left'),
+                  main.title.size = 1.5, legend.outside = TRUE,)
+      
     })
+    
     
     output$funnelPlot <- renderPlot(
     {
