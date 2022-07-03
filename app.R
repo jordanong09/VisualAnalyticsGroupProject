@@ -10,12 +10,11 @@ library (igraph)
 library(ggsci)
 library (DT)
 library(scales)
+library (PMCMRplus)
 
 Resident_Details <- readRDS("data/Resident_Details.rds")
 nonResident_Details <- readRDS("data/NonResident_Details.rds")
 total_data <- readRDS('data/business_plot.rds')
-buildings <- read_sf("data/Buildings.csv", 
-                     options = "GEOM_POSSIBLE_NAMES=location")
 total_data <- st_as_sf (total_data)
 Region <- st_read('data/buildings.shp') 
 
@@ -29,7 +28,6 @@ recreation_visit_social <- readRDS("data/recreation_visit_social.rds")
 social_interaction <- readRDS("data/social_interaction_all.rds")
 residential_data <- readRDS("data/Residential_Details.rds")
 residential_data_sf <- st_as_sf(residential_data)
-
 
 color_palettes <- c("#e485a4",
   "#58bc51",
@@ -187,16 +185,7 @@ body <- dashboardBody(
                        width = NULL, status = "info",
                        selectInput(inputId = "time",
                                    label = "Choose a Month for visualisation: ",
-                                   choices = c("Mar 22",
-                                               "Apr 22",
-                                               "May 22",
-                                               "Jun 22",
-                                               "Jul 22",
-                                               "Aug 22",
-                                               "Sep 22",
-                                               "Oct 22",
-                                               "Nov 22",
-                                               "Dec 22"),
+                                   choices = unique(buildings_details$time),
                                    selected = "Mar 22")
                      ),   
               )
@@ -609,22 +598,17 @@ server <- function(input, output, session) {
   output$Demo_Buildings1 <- renderUI({
     
     if(input$Demo_Buildings == "Buildings") {
-      bchoices = c( "Vacancy",
-                   "Building Type"
-      )
+      bchoices = "Building Type"
     } 
     
     if(input$Demo_Buildings == "Residential") {
-      bchoices = c( "Vacancy",
-                    "Shared Apartment"
-      )
+      bchoices = "Shared Apartment"
     } 
     
     
     selectInput(inputId = "Demo_Buildings1",
-               label = "Choose a Category Type for Buildings Visualisation",
-               choices = bchoices,
-               selected = "Vacancy")
+               label = "Type for Buildings Visualisation",
+               choices = bchoices)
     
   })                     
   
@@ -967,10 +951,11 @@ server <- function(input, output, session) {
        scale_fill_manual("Region", values = c("#3747b4", "#01df8c", "#ac3400", "#a8c5ff")) +
        geom_point(data = building_plot(), aes(x = long, y = lat, size = count), color = "black", pch=21, fill = "2B54F0") +
        scale_size_continuous("Resident Count", breaks = c(1, 3, 5, 7, 10)) +
+       labs(title = "Resident Count based on Buildings in City of Engagement") +
        theme_graph() + 
        theme(panel.grid.major = element_line(color = gray(0.5), linetype = "dashed", 
                                              size = 0.5), panel.background = element_rect(fill = "aliceblue"),
-             text=element_text(family="serif"))
+             text=element_text(family="serif"), plot.title = element_text(size = 14, face = "bold", hjust=0.5))
      
    })
    
@@ -1060,13 +1045,13 @@ server <- function(input, output, session) {
    output$socialPlot <- renderPlot ({
      
      
-     new_graph1 <- delete_vertices(social_graph(), V(social_graph())[value < quantile (V(social_graph())$value,0.9)])
-     filter <- quantile (V(new_graph1)$value,0.9)
+     #new_graph1 <- delete_vertices(social_graph(), V(social_graph())[value < quantile (V(social_graph())$value,0.9)])
+     filter1 <- quantile (V(social_graph())$value,0.99)
      
-     ggraph(new_graph1, layout = "graphopt") +
-       geom_edge_link(edge_colour = "#a46cb7", edge_width = 0.05) + 
-       geom_node_point(aes(size = ifelse (V(new_graph1)$value > filter, 4, 0.001)),color = ifelse (V(new_graph1)$value > filter, "#cb6a49", "#7aa457")) +
-       geom_node_label(aes(label = ifelse (V(new_graph1)$value > filter, V(new_graph1)$name, NA),family="serif" ), repel = TRUE) +
+     ggraph(social_graph(), layout = "graphopt") +
+       geom_edge_link0(edge_colour = "#a46cb7", edge_width = 0.05) + 
+       geom_node_point(aes(size = ifelse (V(social_graph())$value > filter1, 4, 0.001)),color = ifelse (V(social_graph())$value > filter1, "#cb6a49", "#7aa457")) +
+       geom_node_label(aes(label = V(social_graph())$name, filter = V(social_graph())$value > filter1), repel = TRUE, family="serif") +
        theme_graph() +
        labs(title = paste0("Top 1% influential participant based on ",input$network)) +
        theme(legend.position = "none", plot.title=element_text(size = 10, hjust=0.5, vjust=0.5, face='bold'),
@@ -1164,6 +1149,7 @@ server <- function(input, output, session) {
      ) +
        ggplot2::scale_color_manual(values = color_palettes)
      
+     
    })
     
     
@@ -1183,7 +1169,7 @@ server <- function(input, output, session) {
                                                plot.title = element_text(size = 14, face = "bold", hjust=0.5),
                                                text=element_text(family="serif")),
         ggplot.component = ggplot2::scale_y_continuous (labels = comma),
-        title = paste0(input$Weekday," Revenue of Pubs and Restaurants ")
+        title = paste0("Average ", input$Weekday," Revenue of Pubs and Restaurants ")
       ) 
       
     })
