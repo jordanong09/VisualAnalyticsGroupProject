@@ -703,30 +703,24 @@ server <- function(input, output, session) {
      if (input$network == "Degree Centrality") {
        V(new_graph)$value <- degree(new_graph)
        V(new_graph)$label <- ifelse (V(new_graph)$value > quantile (V(new_graph)$value,0.99),V(new_graph)$name,NA)
-       new_graph
        
      } else if(input$network == "Eigenvector Centrality") {
        V(new_graph)$value <- evcent(new_graph)$vector
        V(new_graph)$label <- ifelse (V(new_graph)$value > quantile (V(new_graph)$value,0.99),V(new_graph)$name,NA)
-       new_graph
        
      } else if(input$network == "PageRank Centrality") {
        V(new_graph)$value <- page_rank(new_graph)$vector
        V(new_graph)$label <- ifelse (V(new_graph)$value > quantile (V(new_graph)$value,0.99),V(new_graph)$name,NA)
-       new_graph
        
      } else if(input$network == "Hub Centrality") {
        V(new_graph)$value <- hub_score(new_graph)$vector
        V(new_graph)$label <- ifelse (V(new_graph)$value > quantile (V(new_graph)$value,0.99),V(new_graph)$name,NA)
-       new_graph
      } else if(input$network == "Authority Centrality") {
        V(new_graph)$value <- authority.score(new_graph)$vector
        V(new_graph)$label <- ifelse (V(new_graph)$value > quantile (V(new_graph)$value,0.99),V(new_graph)$name,NA)
-       new_graph
      }
      
-     
-     
+     new_graph
      
    })
    
@@ -853,7 +847,7 @@ server <- function(input, output, session) {
    
    output$point1_info1 <- renderInfoBox({
      infoBox(
-       "Around 13%", "Non-residents among data Coming from Low and High Eduction Level", icon = icon("ok-sign", lib = "glyphicon"),
+       "Around 13%", "Non-residents among data Coming from Low and High Education Level", icon = icon("ok-sign", lib = "glyphicon"),
        color = "yellow", fill = TRUE)
    })
    
@@ -1044,14 +1038,14 @@ server <- function(input, output, session) {
    
    output$socialPlot <- renderPlot ({
      
+     new_graph1 <- delete_vertices(social_graph(), V(social_graph())[value < quantile (V(social_graph())$value,0.9)])
      
-     #new_graph1 <- delete_vertices(social_graph(), V(social_graph())[value < quantile (V(social_graph())$value,0.9)])
-     filter1 <- quantile (V(social_graph())$value,0.99)
+     filter1 <- quantile (V(new_graph1)$value,0.9)
      
-     ggraph(social_graph(), layout = "graphopt") +
+     ggraph(new_graph1, layout = "graphopt") +
        geom_edge_link0(edge_colour = "#a46cb7", edge_width = 0.05) + 
-       geom_node_point(aes(size = ifelse (V(social_graph())$value > filter1, 4, 0.001)),color = ifelse (V(social_graph())$value > filter1, "#cb6a49", "#7aa457")) +
-       geom_node_label(aes(label = V(social_graph())$name, filter = V(social_graph())$value > filter1), repel = TRUE, family="serif") +
+       geom_node_point(aes(size = ifelse (V(new_graph1)$value > filter1, 4, 0.001)),color = ifelse (V(new_graph1)$value > filter1, "#cb6a49", "#7aa457")) +
+       geom_node_label(aes(label = V(new_graph1)$name, filter = V(new_graph1)$value > filter1), repel = TRUE, family="serif") +
        theme_graph() +
        labs(title = paste0("Top 1% influential participant based on ",input$network)) +
        theme(legend.position = "none", plot.title=element_text(size = 10, hjust=0.5, vjust=0.5, face='bold'),
