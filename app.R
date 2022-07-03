@@ -10,6 +10,12 @@ library (igraph)
 library(ggsci)
 library (DT)
 library(scales)
+library(showtext)
+
+font_add_google("Arial Narrow", "ArialNarrow")
+
+## Automatically use showtext to render text
+showtext_auto()
 
 
 Resident_Details <- readRDS("data/Resident_Details.rds")
@@ -943,7 +949,7 @@ server <- function(input, output, session) {
        geom_point(data = building_plot(), aes(x = long, y = lat, size = count)) +
        geom_sf(data = Region, aes(fill = region)) +
        geom_point(data = building_plot(), aes(x = long, y = lat, size = count), color = "black", pch=21, fill = "2B54F0") +
-       # scale_size_continuous(breaks = c(1, 3, 5, 7, 10)) +
+       scale_size_continuous(breaks = c(1, 3, 5, 7, 10)) +
        theme_graph() + 
        labs(size = 'count') +
        theme(panel.grid.major = element_line(color = gray(0.5), linetype = "dashed", 
