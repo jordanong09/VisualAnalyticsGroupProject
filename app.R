@@ -10,15 +10,6 @@ library (igraph)
 library(ggsci)
 library (DT)
 library(scales)
-library(showtext)
-library(gfonts)
-library(fontawesome)
-
-#font_add_google("Arial Narrow", "ArialNarrow")
-
-## Automatically use showtext to render text
-#showtext_auto()
-
 
 Resident_Details <- readRDS("data/Resident_Details.rds")
 nonResident_Details <- readRDS("data/NonResident_Details.rds")
@@ -70,7 +61,7 @@ color_palettes <- c("#e485a4",
 
 sidebar <- dashboardSidebar(
   sidebarMenu(
-    menuItem("Dashboard", tabName = "dashboard", icon = icon("dashboard")),
+    menuItem("Dashboard", tabName = "dashboard", icon = icon("tachometer-alt")),
     menuItem("Demographics", tabName = "point1", icon = icon("globe"), startExpanded = TRUE,
              menuSubItem("Population", tabName = "point1-1"),
              menuSubItem("Buildings", tabName = "point1-2")),
@@ -215,7 +206,7 @@ body <- dashboardBody(
               column(width = 6,
                      box(width = NULL, color = "teal", plotOutput("buildingBarPlot"))),
               column(width = 6,
-                     box(width = NULL, color = "teal", plotOutput("buildingPlot", click=clickOpts(id="plot_click"))))
+                     box(width = NULL, color = "teal", plotOutput("buildingPlot", brush=brushOpts(id="plot_click"))))
             ),
             fluidRow(
               column(width = 12,
@@ -282,9 +273,8 @@ body <- dashboardBody(
                                    label = "Choose a Network Centrality Measure",
                                    choices = c( "Degree Centrality",
                                                 "Eigenvector Centrality",
-                                                "Hub Centrality" = "hubs",
-                                                "Authority Centrality" = "authorities",
-                                                "Closeness Centrality" = "closeness",
+                                                "Hub Centrality",
+                                                "Authority Centrality",
                                                 "PageRank Centrality"))
                      )
               ),
@@ -453,7 +443,7 @@ body <- dashboardBody(
                      box(
                        width = NULL, status = "info",
                        selectInput(inputId = "filterFunnel2",
-                                   label = "Choose a month to filter",
+                                   label = "Choose a Month to filter",
                                    choices = c( "All",
                                                 "Mar 2022",
                                                 "Apr 2022",
@@ -740,7 +730,17 @@ server <- function(input, output, session) {
        V(new_graph)$value <- page_rank(new_graph)$vector
        V(new_graph)$label <- ifelse (V(new_graph)$value > quantile (V(new_graph)$value,0.99),V(new_graph)$name,NA)
        new_graph
+       
+     } else if(input$network == "Hub Centrality") {
+       V(new_graph)$value <- hub_score(new_graph)$vector
+       V(new_graph)$label <- ifelse (V(new_graph)$value > quantile (V(new_graph)$value,0.99),V(new_graph)$name,NA)
+       new_graph
+     } else if(input$network == "Authority Centrality") {
+       V(new_graph)$value <- authority.score(new_graph)$vector
+       V(new_graph)$label <- ifelse (V(new_graph)$value > quantile (V(new_graph)$value,0.99),V(new_graph)$name,NA)
+       new_graph
      }
+     
      
      
      
@@ -909,7 +909,8 @@ server <- function(input, output, session) {
             title = paste0("Distribution of Residents by ",input$demo_category)) +
        theme(axis.title.y= element_text(angle=0), axis.ticks.x= element_blank(),
              panel.background= element_blank(), axis.line= element_line(color= 'grey'), legend.position="none",
-             plot.title = element_text(size = 14, face = "bold")) 
+             plot.title = element_text(size = 14, face = "bold"),
+             text=element_text(family="serif")) 
      
    })
    
@@ -925,7 +926,8 @@ server <- function(input, output, session) {
        ylab = input$demo_category1,
        ggplot.component = list(ggplot2::scale_x_discrete(guide = ggplot2::guide_axis(n.dodge = 2))),
        ggtheme = ggplot2::theme_classic() + theme(axis.title.y= element_text(angle=0),
-                                                  plot.title = element_text(size = 12, face = "bold", hjust=0.5)),
+                                                  plot.title = element_text(size = 12, face = "bold", hjust=0.5),
+                                                  text=element_text(family="serif")),
        palette  = "Set2"
      )
      
@@ -945,7 +947,7 @@ server <- function(input, output, session) {
             title = paste0("Distribution of Buildings by ", input$Demo_Buildings1)) +
        theme(axis.title.y= element_text(angle=0), axis.ticks.x= element_blank(),
              panel.background= element_blank(), axis.line= element_line(color= 'grey'),
-             plot.title = element_text(size = 14, face = "bold"), legend.position="none") 
+             plot.title = element_text(size = 14, face = "bold"), legend.position="none", text=element_text(family="serif")) 
      
    })
    
@@ -961,24 +963,25 @@ server <- function(input, output, session) {
      
      ggplot () +
        geom_point(data = building_plot(), aes(x = long, y = lat, size = count)) +
-       geom_sf(data = Region, aes(fill = region)) +
+       geom_sf(data = Region, aes(fill = region), alpha = 0.6) +
+       scale_fill_manual("Region", values = c("#3747b4", "#01df8c", "#ac3400", "#a8c5ff")) +
        geom_point(data = building_plot(), aes(x = long, y = lat, size = count), color = "black", pch=21, fill = "2B54F0") +
-       scale_size_continuous(breaks = c(1, 3, 5, 7, 10)) +
+       scale_size_continuous("Resident Count", breaks = c(1, 3, 5, 7, 10)) +
        theme_graph() + 
-       labs(size = 'count') +
        theme(panel.grid.major = element_line(color = gray(0.5), linetype = "dashed", 
-                                             size = 0.5), panel.background = element_rect(fill = "aliceblue"))
+                                             size = 0.5), panel.background = element_rect(fill = "aliceblue"),
+             text=element_text(family="serif"))
      
    })
    
    diam1 <- reactive({
      
      user_brush1 <- input$plot_click
-     mysel <- nearPoints(building_plot(), user_brush1, maxpoints = 1)
-     mysel_long <- mysel %>% tidyr::separate_rows(residents, convert = TRUE)
-     unique1 <- unique(mysel_long$residents)
-     p_details <- Participant_Details() %>%
-       filter (`Participant ID` %in% unique1)
+     mysel <- brushedPoints(building_plot(), user_brush1)
+     mysel_long <- mysel %>% unnest_longer(residents) %>%
+       select(residents, buildingId)
+     p_details <- mysel_long %>%
+       left_join (Participant_Details(), by = c("residents" = "Participant ID"))
      return(p_details)
      
    })
@@ -996,35 +999,36 @@ server <- function(input, output, session) {
    
    output$point2_info2 <- renderInfoBox({
      infoBox(
-       " ", HTML("<br/>Weekend has higher Social Activies at all time"), icon = icon("tag", lib = "glyphicon"),
+       " ", HTML("<br/>Weekends has higher Social Activities (Pub Visit) throughout the day"), icon = icon("tag", lib = "glyphicon"),
        color = "olive", fill = TRUE)
    })
    
    output$point2_info3 <- renderInfoBox({
      infoBox(
-       " ", HTML("Joviality, Region, Pub Visit, Rental are factors for Influence Level"), icon = icon("bookmark", lib = "glyphicon"),
+       " ", HTML("Joviality, Region and Pub Visit are factors for Influence Level"), icon = icon("bookmark", lib = "glyphicon"),
        color = "red", fill = TRUE)
    })
    
    output$point2_info4 <- renderInfoBox({
      infoBox(
-       " ", HTML("Less Social Intercaction between Residents and Non-residents"), icon = icon("pushpin", lib = "glyphicon"),
+       " ", HTML("No Social Interaction recorded by Non-residents"), icon = icon("pushpin", lib = "glyphicon"),
        color = "light-blue", fill = TRUE)
    })
       
    
    output$socialstatsPlot <- renderPlot({
-     req(input$socialfilter)
+     req(input$plot)
      
      ggbetweenstats(
        data = statsplot(),
        x = !!rlang::sym(input$socialfilter),
        y = Visitcount,
-       xlab = input$socialfilter,
-       ylab = "VisitCount",
+       xlab = gsub("_", " ",input$socialfilter),
+       ylab = "Visit Count",
        pairwise.comparisons = FALSE,
        ggtheme = ggplot2::theme_classic() + theme(axis.title.y= element_text(angle=0),
-                                                  plot.title = element_text(size = 14, face = "bold", hjust=0.5)),
+                                                  plot.title = element_text(size = 14, face = "bold", hjust=0.5),
+                                                  text=element_text(family="serif")),
        ggplot.component = ggplot2::scale_color_manual(values = color_palettes),
        title = paste0("Visit Count of Pubs by ", input$socialfilter)
      )
@@ -1032,17 +1036,19 @@ server <- function(input, output, session) {
    })
    
    output$socialstatsPlotgroup <- renderPlot({
-    req(input$t1)
+    req(input$plot)
      
           grouped_ggbetweenstats(
                    data = dplyr::filter(statsplot(), !!rlang::sym(input$socialfiltergroup) %in% input$t1),
                    x = !!rlang::sym(input$socialfilter),
                    y = Visitcount,
                    grouping.var = !!rlang::sym(input$socialfiltergroup),
-                   ylab = "VisitCount",
+                   ylab = "Visit Count",
+                   xlab = gsub("_", " ",input$socialfilter),
                    pairwise.comparisons = FALSE,
                    ggtheme = ggplot2::theme_classic() + theme(axis.title.y= element_text(angle=0),
-                                                              plot.title = element_text(size = 14, face = "bold", hjust=0.5)),
+                                                              plot.title = element_text(size = 14, face = "bold", hjust=0.5),
+                                                              text=element_text(family="serif")),
                    ggplot.component = ggplot2::scale_color_manual(values = color_palettes),
                    annotation.args  = list(title = paste0("Visit Count of Pubs by ", input$socialfilter))
                  )
@@ -1058,12 +1064,13 @@ server <- function(input, output, session) {
      filter <- quantile (V(new_graph1)$value,0.9)
      
      ggraph(new_graph1, layout = "graphopt") +
-       geom_edge_link(edge_colour = "grey", edge_width = 0.05) + 
-       geom_node_point(aes(size = ifelse (V(new_graph1)$value > filter, 4, 0.001)),color = ifelse (V(new_graph1)$value > filter, "#98984d", "#b3669e")) +
-       geom_node_label(aes(label = ifelse (V(new_graph1)$value > filter, V(new_graph1)$name, NA)), repel = TRUE) +
+       geom_edge_link(edge_colour = "#a46cb7", edge_width = 0.05) + 
+       geom_node_point(aes(size = ifelse (V(new_graph1)$value > filter, 4, 0.001)),color = ifelse (V(new_graph1)$value > filter, "#cb6a49", "#7aa457")) +
+       geom_node_label(aes(label = ifelse (V(new_graph1)$value > filter, V(new_graph1)$name, NA),family="serif" ), repel = TRUE) +
        theme_graph() +
-       ggtitle(paste0("Top 1% influential participant based on ",input$network)) +
-       theme(legend.position = "none", plot.title=element_text( size = 10, hjust=0.5, vjust=0.5, face='bold'))
+       labs(title = paste0("Top 1% influential participant based on ",input$network)) +
+       theme(legend.position = "none", plot.title=element_text(size = 10, hjust=0.5, vjust=0.5, face='bold'),
+             text=element_text(family="serif"))
      
 
    })
@@ -1086,7 +1093,8 @@ server <- function(input, output, session) {
          xlab  = input$networkstatsfilter,
          ylab  = input$network,
          ggtheme = ggplot2::theme_classic() + theme(axis.title.y= element_text(angle=0),
-                                                    plot.title = element_text(size = 14, face = "bold", hjust=0.5)),
+                                                    plot.title = element_text(size = 14, face = "bold", hjust=0.5),
+                                                    text=element_text(family="serif")),
          ggplot.component = ggplot2::scale_color_manual(values = color_palettes),
          title = paste0(input$network, " comparison with ", input$networkstatsfilter)
        )
@@ -1100,7 +1108,8 @@ server <- function(input, output, session) {
          ylab = input$network,
          pairwise.comparisons = FALSE,
          ggtheme = ggplot2::theme_classic() + theme(axis.title.y= element_text(angle=0),
-                                                    plot.title = element_text(size = 14, face = "bold", hjust=0.5)),
+                                                    plot.title = element_text(size = 14, face = "bold", hjust=0.5),
+                                                    text=element_text(family="serif")),
          ggplot.component = ggplot2::scale_color_manual(values = color_palettes),
          title = paste0(input$network, " comparison with ", input$networkstatsfilter)
        )
@@ -1127,19 +1136,19 @@ server <- function(input, output, session) {
    
    output$point3_info3 <- renderInfoBox({
      infoBox(
-       " ", HTML("<br/>Venue Visit is not affecting factor for Revenue"), icon = icon("ok-sign", lib = "glyphicon"),
+       " ", HTML("<br/>Venue Visit has no correlation with Revenue"), icon = icon("ok-sign", lib = "glyphicon"),
        color = "red", fill = TRUE)
    })
    
    output$point3_info4 <- renderInfoBox({
      infoBox(
-       " ", HTML("<br/>Pubs have Higher Revenue due to its Higher Cost"), icon = icon("bookmark", lib = "glyphicon"),
+       " ", HTML("<br/>Pubs have Higher Revenue despite Lesser Visit"), icon = icon("bookmark", lib = "glyphicon"),
        color = "light-blue", fill = TRUE)
    })
    
    output$statsPlot <- renderPlot({
      
-     ggbetweenstats(
+     ggstatsplot::ggbetweenstats(
        data = ggstatsplot(),
        x = DateMonth,
        y = Expenses,
@@ -1149,10 +1158,11 @@ server <- function(input, output, session) {
        p.adjust.method = input$pvalueType1,
        plot.type = input$plotType1,
        ggtheme = ggplot2::theme_classic() + theme(axis.title.y= element_text(angle=0),
-                                               plot.title = element_text(size = 14, face = "bold", hjust=0.5)),
-       ggplot.component = ggplot2::scale_color_manual(values = color_palettes),
+                                               plot.title = element_text(size = 14, face = "bold", hjust=0.5),
+                                               text=element_text(family="serif")),
        title = paste0("Revenue of ", input$ggstatfilter, "s for different Months")
-     )
+     ) +
+       ggplot2::scale_color_manual(values = color_palettes)
      
    })
     
@@ -1170,7 +1180,8 @@ server <- function(input, output, session) {
         palette = "Set3",
         plot.type = input$plotType,
         ggtheme = ggplot2::theme_classic()+ theme(axis.title.y= element_text(angle=0),
-                                               plot.title = element_text(size = 14, face = "bold", hjust=0.5)),
+                                               plot.title = element_text(size = 14, face = "bold", hjust=0.5),
+                                               text=element_text(family="serif")),
         ggplot.component = ggplot2::scale_y_continuous (labels = comma),
         title = paste0(input$Weekday," Revenue of Pubs and Restaurants ")
       ) 
@@ -1181,6 +1192,7 @@ server <- function(input, output, session) {
       
       tm_shape(Region)+
         tm_polygons(col = "region",
+                    palette = c("#3747b4", "#01df8c", "#ac3400", "#a8c5ff"),
                     size = 1,
                     title = "Region",
                     border.col = "black",
@@ -1208,8 +1220,9 @@ server <- function(input, output, session) {
         geom_ribbon(aes(ymin = 0, ymax = df()$lwr99), fill = "#8fd6c9", alpha = 0.5) +
         
         # Overlay points and lines
-        geom_point(aes(shape = Type, color = Type), size = 2) + 
-        scale_color_manual(values=c('#E69F00', '#56B4E9')) +
+        geom_point(aes(shape = Type, fill = Type), size = 3, color = "black") + 
+        scale_fill_manual(values=c('#ea007c', '#00782b')) +
+        scale_shape_manual(values=c(21, 25))+
         geom_smooth(method="lm", colour="black", lwd=1.1, se=FALSE) + 
         geom_line(aes(y = upr95), color="black", linetype=2) + 
         geom_line(aes(y = lwr95), color="black", linetype=2) +
@@ -1221,7 +1234,8 @@ server <- function(input, output, session) {
         scale_y_continuous (labels = comma,limits = c(0, NA)) +
         theme(axis.title.y= element_text(angle=0), axis.ticks.x= element_blank(),
               panel.background= element_blank(), axis.line= element_line(color= 'grey'),
-              plot.title = element_text(size = 14, face = "bold")) 
+              plot.title = element_text(size = 14, face = "bold"),
+              text=element_text(family="serif")) 
         
     })
     
