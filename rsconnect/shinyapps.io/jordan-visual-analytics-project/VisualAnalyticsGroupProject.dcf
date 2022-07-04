@@ -5,10 +5,10 @@ account: jordan-visual-analytics-project
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 6567648
-bundleId: 6053868
+bundleId: 6065809
 url: https://jordan-visual-analytics-project.shinyapps.io/VisualAnalyticsGroupProject/
-when: 1656495759.74469
-lastSyncTime: 1656495759.7447
+when: 1656863118.04522
+lastSyncTime: 1656863118.04523
 asMultiple: FALSE
 asStatic: FALSE
-ignoredFiles: point 1|point 3|rawdata|trial
+ignoredFiles: _site.yml|app copy.R|css/maps/style.css.map|css/style.css|index.html|js/theme.js|project.html|README.md|service.html|single-project.html|_site|archive|images|plugins|projectfolder|proposal|scss
